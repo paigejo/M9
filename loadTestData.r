@@ -1,10 +1,10 @@
 # test emulator on small testing dataset from M9 project SageMathCloud page
-setwd("/Users/paigejo/Google Drive/UW/guttorp/code")
+setwd("~/git/M9")
 library(RcppCNPy)
 library(fields)
 
 #####get SageMathCloud testing data:
-setwd("/Users/paigejo/Google Drive/UW/guttorp/code/data")
+setwd("~/git/M9/data")
 
 #allHMax
 allHMax = array(NA, dim=c(6, 250, 250))

@@ -1,35 +1,78 @@
-setwd("/Users/paigejo/Google Drive/UW/guttorp/code")
+setwd("~/git/M9")
 source("loadTestData.r")
 library(fields)
 
 #generate vgram data
 R = 3959 #in miles
 lonExtent= c(235.79781, 235.82087)
+latExtent = c(41.739671,41.762726)
 CCLon = mean(lonExtent)
 CCLat = mean(latExtent)
-latExtent = c(41.739671,41.762726)
-lonDist = cos(lat)*2*pi/360*R
+lonDist = cos(CCLat)*2*pi/360*R
 latDist = 2*pi*R/360
 
-xgrid = lon*lonDist
-ygrid = lat*LatDist
-grid = make.surface.grid(list(X=xgrid, Y=ygrid))
-X = grid$X
-Y = grid$Y
+X = lon*lonDist
+Y = lat*latDist
+gridL = matrix(c(X, Y), ncol=2)
 
+#set distances and how many points to compare each point with for vgram
+nX = dim(allHMax)[2]
+nY = dim(allHMax)[3]
 maxX = max(X)
 minX = min(X)
-distPerCell = (maxX - minX)/250
-rectDim = 15
-maxDist = floor(rectDim/2)*distPerCell
+maxY = max(Y)
+minY = min(Y)
+distPerCellX = (maxX - minX)/nX
+distPerCellY =  (maxY - minY)/nY
+rectDim = 15 #size of the square around each point containing points for comparison
+maxIndexDist = floor(rectDim/2)
+#maxDist = maxIndexDist*min(c(distPerCellX, distPerCellY))
+
+#these are the indices each point is connected to in the general case, 
+#disregarding points near the edge of the grid.  Those are taken into account 
+#later with the removeMask variable.  Note that only indices beyond the current 
+#index are compared to avoid double-counting
+connectI = seq(0, nY*maxIndexDist, by=nY)
+connectI = rep(connectI, maxIndexDist+1) + rep(0:maxIndexDist, rep(maxIndexDist+1, maxIndexDist+1))
+xI = rep(0:maxIndexDist, maxIndexDist+1)
+yI = connectI %% nY
+xI = xI[connectI != 0]
+yI = yI[connectI != 0]
+connectI = connectI[connectI != 0] 
+
+#ID is the id matrix for vgram containing what points to compare to what. Generate 
+#all comparisons in this for loop
+ID = matrix(NA, nrow=nX*nY*length(connectI), ncol=2)
+removeMask = rep(FALSE, nX*nY*length(connectI))
+for(i in 1:nX*nY) {
+  thisConnectI = connectI + i
+  thisXI = ((i-1) %/% nY) + 1 #between 1 and nX
+  thisYI = ((i-1) %% nY) + 1 #between 1 and nY
+  
+  #change from torus to R2 topology by removing certain comparisons
+  thisRemoveMask = rep(FALSE, length(thisConnectI))
+  if(thisXI > nX - maxIndexDist)
+     thisRemoveMask = thisRemoveMask | xI > nX - thisXI
+  if(thisYI > nY - maxIndexDist)
+     thisRemoveMask = thisRemoveMask | yI > nY - thisYI
+  #add the connections/comparisons for point i to the ID matrix
+  startI = (i-1)*length(connectI) + 1
+  endI = i*length(connectI)
+  ID[startI:endI,] = cbind(i, thisConnectI)
+  removeMask[startI:endI] = thisRemoveMask
+}
+
+#remove bad rows in ID matrix
+ID = ID[!removeMask,]
 
 #calculate vgram for each slice of HMax: each tsunami realization
 for(i in 1:dim(allHMax)[1]) {
+  floodVals = c(allHMax[i,,])
   if(i == 1)
-    VG= vgram(grid, allHMax[i,,], dmax=maxDist)
+    VG= vgram(gridL, floodVals, id=ID)
   else {
     #concetenate vgram
-    VGslice = vgram(grid, allHMax[i,,], dmax=maxDist)
+    VGslice = vgram(gridL, floodVals, id=ID)
     VG$d = c(VG$d, VGslice$d)
     VG$vgram = c(VG$vgram, VGslice$vgram)
   }
