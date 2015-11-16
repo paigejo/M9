@@ -1,10 +1,10 @@
 # test emulator on small testing dataset from M9 project SageMathCloud page
-setwd("~/git/M9")
+wd = getwd()
 library(RcppCNPy)
 library(fields)
 
 #####get SageMathCloud testing data:
-setwd("~/git/M9/data")
+setwd("~/git/M9/test_data")
 
 #allHMax
 allHMax = array(NA, dim=c(6, 250, 250))
@@ -18,3 +18,5 @@ for(i in 0:5) {
 topo = npyLoad("CCTopo.npy")
 lon = npyLoad("CCLon.npy")
 lat = npyLoad("CCLat.npy")
+
+setwd(wd)
