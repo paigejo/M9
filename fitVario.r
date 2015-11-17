@@ -74,43 +74,68 @@ fitVario = function() {
   #calculate vgram for each slice of HMax: each tsunami realization
   for(i in 1:dim(allHMax)[1]) {
     floodVals = c(allHMax[i,,])
-    if(i == 1)
-      VG= vgram(gridL, floodVals, id=ID)
+    if(i == 1) {
+      VG= vgram(gridL, floodVals, id=ID, type="variogram")
+      coVG = vgram(gridL, floodVals, id=ID, type="covariogram")
+    }
     else {
       #concetenate vgram
-      VGslice = vgram(gridL, floodVals, id=ID)
+      VGslice = vgram(gridL, floodVals, id=ID, type="variogram")
+      coVGslice = vgram(gridL, floodVals, id=ID, type="covariogram")
       VG$d = c(VG$d, VGslice$d)
       VG$vgram = c(VG$vgram, VGslice$vgram)
+      coVG$d = c(coVG$d, coVGslice$d)
+      coVG$vgram = c(coVG$vgram, coVGslice$vgram)
     }
   }
   
   #fit exponential variogram to data
   maxDist = maxIndexDist*min(c(distPerCellX, distPerCellY))
-  s = mean(VG$vgram[VG$d > maxDist*.9]) #sill
-  n = mean(VG$vgram[VG$d < maxDist*.1]) #nugget
+  s = mean(VG$vgram[VG$d > quantile(VG$d, .9)]) #sill
+  n = mean(VG$vgram[VG$d < quantile(VG$d, .1)]) #nugget
   r = maxDist # range
   ys = VG$vgram
   ds = list(ds=VG$d)
-  fit = nls(ys ~ (s - n)*(1 - exp(-(ds)/r)) + n, start=list(s=s, n=n, r=r), data=ds)
+  lower = list(s=0.00001, n=0.00001, r=.00001)
+  #this is the variogram function. Go to http://www.seas.upenn.edu/~ese502/NOTEBOOK/Part_II/4_Variograms.pdf 
+  #to get covariogram from variogram
+  fit = nls(ys ~ (s - n)*(1 - exp(-(ds)/r)) + n, start=list(s=s, n=n, r=r), lower=lower, data=ds, algorithm="port")
   summary(fit)
   
   #get variogram coefficients
   coefs = coef(fit)
-  s = coefs$s
-  n = coefs$n
-  r = coefs$r
+  s = coefs[1]
+  n = coefs[2]
+  r = coefs[3]
   
-  #plot variogram fit
+  #plot variogram and covariogram fits
   expVGram = function(h) {
     (s - n)*(1 - exp(-h/r)) + n
   }
+  expCoVGram = function(h) {
+    (s - n)*exp(-h/r)
+  }
   xs = seq(0, maxDist, length=500)
-  vgramFit = expVGram(xs)
   
-  pdf("expVGram.pdf", height=5, width=7)
+  pdf("expVGramPlot.pdf", height=5, width=7)
   plot(VG, main="Empirical and Exponential Variogram Fit")
-  lines(xs, expVGram(xs), col=green)
+  lines(xs, expVGram(xs), col="green")
   dev.off()
   
-  save(s, n, r, file="fitExpVarioParams.RData")
+  pdf("expVGramBoxplot.pdf", height=5, width=7)
+  boxplotVGram(VG, main="Empirical and Exponential Variogram Fit")
+  lines(xs, expVGram(xs), col="green")
+  dev.off()
+  
+  pdf("expCoVGramPlot.pdf", height=5, width=7)
+  plot(coVG, main="Empirical and Exponential Covariogram Fit")
+  lines(xs, expCoVGram(xs), col="green")
+  dev.off()
+
+  pdf("expCoVGramBoxplot.pdf", height=5, width=7)
+  boxplotVGram(coVG, main="Empirical and Exponential Covariogram Fit")
+  lines(xs, expCoVGram(xs), col="green")
+  dev.off()
+  
+  save(s, n, r, VG, coVG, file="fitExpVarioParams.RData")
 }
