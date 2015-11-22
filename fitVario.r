@@ -2,6 +2,112 @@ setwd("~/git/M9")
 source("loadTestData.r")
 library(fields)
 
+filterVG = function(VG, pct, minVG=-Inf, maxVG=Inf) {
+  n = ceiling(length(VG$d)*pct)
+  ind = (VG$vgram <= maxVG) & (VG$vgram >= minVG)
+  VG$vgram = VG$vgram[ind]
+  VG$d = VG$d[ind]
+  if(length(VG$d) <= n) {
+    return(VG)
+  }
+  newInd = sample(1:length(VG$d), n)
+  VG$d = VG$d[newInd]
+  VG$vgram = VG$vgram[newInd]
+  return(VG)
+}
+
+meanVG = function(VG, minD=-Inf, maxD=Inf, statFun=mean, ...) {
+  ind = (VG$d > minD) & (VG$d < maxD)
+  do.call(statFun, c(list(VG$vgram[ind]), list(...)))
+}
+
+plotVGMean = function(x, N = 10, breaks = pretty(x$d, N, eps.correct = 1), 
+                      add = FALSE, ...) 
+{
+  otherArgs = list(...)
+  type = x$type
+  if (is.null(otherArgs$ylab)) {
+    if (type == "variogram")
+      ylab = "sqrt(Variance)"
+    else if (type == "covariogram" || type == "cross-covariogram") 
+      ylab = "Covariance"
+    else if (type == "correlogram" || type == "cross-correlogram") 
+      ylab = "Correlation"
+    else stop("vgram 'type' argument must be either 'variogram', 'covariogram', 'correlogram', 'cross-covariogram', or 'cross-correlogram'")
+  }
+  else {
+    ylab = otherArgs$ylab
+    otherArgs$ylab = NULL
+  }
+  if (is.null(otherArgs$xlab)) 
+    xlab = "Distance (Miles)"
+  else {
+    xlab = otherArgs$xlab
+    otherArgs$xlab = NULL
+  }
+  if (is.null(otherArgs$main)) {
+    if (type == "variogram") 
+      main = "Empirical Variogram"
+    else if (type == "covariogram") 
+      main = "Empirical Covariogram"
+    else if (type == "correlogram") 
+      main = "Empirical Correlogram"
+    else if (type == "cross-covariogram") 
+      main = "Empirical Cross-Covariogram"
+    else if (type == "cross-correlogram") 
+      main = "Empirical Cross-Correlogram"
+    else stop("vgram 'type' argument must be either 'variogram', 'covariogram', 'correlogram', 'cross-covariogram', or 'cross-correlogram'")
+  }
+  else {
+    main = otherArgs$main
+    otherArgs$main = NULL
+  }
+  if (is.null(otherArgs$ylim)) {
+    if (type == "correlogram" || type == "cross-correlogram") 
+      ylim = c(-1, 1)
+    else ylim = NULL
+  }
+  else {
+    ylim = otherArgs$ylim
+    otherArgs$ylim = NULL
+  }
+  if (is.null(otherArgs$type)) 
+    type = "o"
+  else {
+    type = otherArgs$type
+    otherArgs$type = NULL
+  }
+  meansFromBreak = function(breakBounds = c(-Inf, Inf)) {
+    meanVG(x, minD=breakBounds[1], maxD=breakBounds[2], na.rm=TRUE)
+  }
+  lowBreaks = breaks
+  highBreaks = c(breaks[2:length(breaks)], Inf)
+  breakBounds = cbind(lowBreaks, highBreaks)
+  centers = apply(breakBounds, 1, mean, na.rm=TRUE)
+  ys = apply(breakBounds, 1, meansFromBreak)
+  if(x$type == "variogram")
+    ys=sqrt(ys)
+  notNas = !is.na(ys)
+  centers = centers[notNas]
+  ys = ys[notNas]
+  if (!add) 
+    do.call(plot, c(list(centers, ys, main = main, xlab = xlab, 
+                         ylab = ylab, type = type, ylim = ylim), otherArgs))
+  else do.call(lines, c(list(centers, ys, main = main, xlab = xlab, 
+                             ylab = ylab, type = type, ylim = ylim), otherArgs))
+}
+
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+
 fitVario = function() {
   
   #generate vgram data
@@ -17,7 +123,6 @@ fitVario = function() {
   Y = lat*latDist
   gridL = matrix(c(X, Y), ncol=2)
   
-  #set distances and how many points to compare each point with for vgram
   nX = dim(allHMax)[2]
   nY = dim(allHMax)[3]
   maxX = max(X)
@@ -26,6 +131,17 @@ fitVario = function() {
   minY = min(Y)
   distPerCellX = (maxX - minX)/nX
   distPerCellY =  (maxY - minY)/nY
+  
+  #subtract regressed topography data from field first
+  residHMax = allHMax
+  for(i in 1:dim(allHMax)[1]) {
+    floodVals = allHMax[i,,]
+    model = lm(c(floodVals) ~ c(topo))
+    residVals = residuals(model)
+    residHMax[i,,] = array(c(residVals), dim=c(1,nX,nY))
+  }
+  
+  #set distances and how many points to compare each point with for vgram
   rectDim = 15 #size of the square around each point containing points for comparison
   maxIndexDist = floor(rectDim/2)
   #maxDist = maxIndexDist*min(c(distPerCellX, distPerCellY))
@@ -72,8 +188,8 @@ fitVario = function() {
   #rows?
   
   #calculate vgram for each slice of HMax: each tsunami realization
-  for(i in 1:dim(allHMax)[1]) {
-    floodVals = c(allHMax[i,,])
+  for(i in 1:dim(residHMax)[1]) {
+    floodVals = c(residHMax[i,,])
     if(i == 1) {
       VG= vgram(gridL, floodVals, id=ID, type="variogram")
       coVG = vgram(gridL, floodVals, id=ID, type="covariogram")
@@ -100,6 +216,10 @@ fitVario = function() {
   #this is the variogram function. Go to http://www.seas.upenn.edu/~ese502/NOTEBOOK/Part_II/4_Variograms.pdf 
   #to get covariogram from variogram
   fit = nls(ys ~ (s - n)*(1 - exp(-(ds)/r)) + n, start=list(s=s, n=n, r=r), lower=lower, data=ds, algorithm="port")
+  #lower = list(a=.00001, r=.00001)
+  #a = mean(coVG$vgram[coVG$d < quantile(coVG$d, .1)]) #intercept
+  #start = list(a=a, r=r)
+  #covFit = nls(ys ~ a*exp(-(ds)/r) + n, start=start, lower=lower, data=ds, algorithm="port")
   summary(fit)
   
   #get variogram coefficients
@@ -113,29 +233,37 @@ fitVario = function() {
     (s - n)*(1 - exp(-h/r)) + n
   }
   expCoVGram = function(h) {
+    a*exp(-h/r2)
+  }
+  expCoVGram2 = function(h) {
     (s - n)*exp(-h/r)
   }
   xs = seq(0, maxDist, length=500)
   
+  filteredCoVG = filterVG(coVG, pct=.1)
+  filteredVG = filterVG(VG, pct=.1)
+  
   pdf("expVGramPlot.pdf", height=5, width=7)
-  plot(VG, main="Empirical and Exponential Variogram Fit")
-  lines(xs, expVGram(xs), col="green")
+  plotVGMean(filteredVG, main="Empirical and Exponential Variogram Fit")
+  lines(xs, sqrt(expVGram(xs)), col="green")
   dev.off()
   
-  pdf("expVGramBoxplot.pdf", height=5, width=7)
-  boxplotVGram(VG, main="Empirical and Exponential Variogram Fit")
-  lines(xs, expVGram(xs), col="green")
-  dev.off()
+#   pdf("expVGramBoxplot.pdf", height=5, width=7)
+#   boxplotVGram(filteredVG, main="Empirical and Exponential Variogram Fit")
+#   lines(xs, sqrt(expVGram(xs)), col="green")
+#   dev.off()
   
   pdf("expCoVGramPlot.pdf", height=5, width=7)
-  plot(coVG, main="Empirical and Exponential Covariogram Fit")
+  plotVGMean(filteredCoVG, main="Empirical and Exponential Covariogram Fit")
   lines(xs, expCoVGram(xs), col="green")
   dev.off()
 
-  pdf("expCoVGramBoxplot.pdf", height=5, width=7)
-  boxplotVGram(coVG, main="Empirical and Exponential Covariogram Fit")
-  lines(xs, expCoVGram(xs), col="green")
-  dev.off()
+#   pdf("expCoVGramBoxplot.pdf", height=5, width=7)
+#   boxplotVGram(filteredCoVG, main="Empirical and Exponential Covariogram Fit")
+#   lines(xs, expCoVGram(xs), col="green")
+#   dev.off()
   
   save(s, n, r, VG, coVG, file="fitExpVarioParams.RData")
 }
+
+
