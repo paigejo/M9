@@ -233,10 +233,10 @@ fitVario = function() {
     (s - n)*(1 - exp(-h/r)) + n
   }
   expCoVGram = function(h) {
-    a*exp(-h/r2)
+    (s - n)*exp(-h/r)
   }
   expCoVGram2 = function(h) {
-    (s - n)*exp(-h/r)
+    a*exp(-h/r2)
   }
   xs = seq(0, maxDist, length=500)
   
