@@ -1,4 +1,5 @@
 source("loadTestData.r")
+library(rARPACK)
 
 #generate data matrix from deformation data
 defDat = loadDeformations()
@@ -8,8 +9,16 @@ for(i in 1:dim(defDat$dat)[3]) {
 }
 
 #take truncated SVD (only need V since t(X)%*%X = V S^2 V* for U,S,V result of svd(X))
-truncation = 40
-out = svd(dat, nu=0, nv=truncation)
+truncation = 5
+out = svds(dat, v=truncation, nu=0, nv=truncation)
 
-save(out, file="seaDef_svd.RData")
+#find total variance: square Frobenius norm of X
+totalVar = norm(dat, type="F")^2
+
+#save results
+save(out, totalVar, file="seaDef_svd.RData")
+
+
+
+
 
