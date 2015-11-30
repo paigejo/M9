@@ -16,7 +16,7 @@ filterVG = function(VG, pct, minVG=-Inf, maxVG=Inf) {
   return(VG)
 }
 
-meanVG = function(VG, minD=-Inf, maxD=Inf, statFun=mean, ...) {
+meanVG = function(VG, minD=-Inf, maxD=Inf, statFun="mean", ...) {
   ind = (VG$d > minD) & (VG$d < maxD)
   do.call(statFun, c(list(VG$vgram[ind]), list(...)))
 }
@@ -108,6 +108,137 @@ plotVGMean = function(x, N = 10, breaks = pretty(x$d, N, eps.correct = 1),
 ######################################################################
 ######################################################################
 
+#fits correlogram
+fitCorrelo = function() {
+  
+  #generate vgram data
+  R = 3959 #in miles
+  lonExtent= c(235.79781, 235.82087)
+  latExtent = c(41.739671,41.762726)
+  CCLon = mean(lonExtent)
+  CCLat = mean(latExtent)
+  lonDist = cos(CCLat)*2*pi/360*R
+  latDist = 2*pi*R/360
+  
+  X = lon*lonDist
+  Y = lat*latDist
+  gridL = matrix(c(X, Y), ncol=2)
+  
+  nX = dim(allHMax)[2]
+  nY = dim(allHMax)[3]
+  maxX = max(X)
+  minX = min(X)
+  maxY = max(Y)
+  minY = min(Y)
+  distPerCellX = (maxX - minX)/nX
+  distPerCellY =  (maxY - minY)/nY
+  
+  #subtract regressed topography data from field first
+  residHMax = allHMax
+  for(i in 1:dim(allHMax)[1]) {
+    floodVals = allHMax[i,,]
+    model = lm(c(floodVals) ~ c(topo))
+    residVals = residuals(model)
+    residHMax[i,,] = array(c(residVals), dim=c(1,nX,nY))
+  }
+  
+  #set distances and how many points to compare each point with for vgram
+  rectDim = 15 #size of the square around each point containing points for comparison
+  maxIndexDist = floor(rectDim/2)
+  #maxDist = maxIndexDist*min(c(distPerCellX, distPerCellY))
+  
+  #these are the indices each point is connected to in the general case, 
+  #disregarding points near the edge of the grid.  Those are taken into account 
+  #later with the removeMask variable.  Note that only indices beyond the current 
+  #index are compared to avoid double-counting
+  connectI = seq(0, nY*maxIndexDist, by=nY)
+  connectI = rep(connectI, maxIndexDist+1) + rep(0:maxIndexDist, rep(maxIndexDist+1, maxIndexDist+1))
+  xI = rep(0:maxIndexDist, maxIndexDist+1)
+  yI = connectI %% nY
+  xI = xI[connectI != 0]
+  yI = yI[connectI != 0]
+  connectI = connectI[connectI != 0] 
+  
+  #ID is the id matrix for vgram containing what points to compare to what. Generate 
+  #all comparisons in this for loop
+  ID = matrix(NA, nrow=nX*nY*length(connectI), ncol=2)
+  removeMask = rep(FALSE, nX*nY*length(connectI))
+  for(i in 1:(nX*nY)) {
+    thisConnectI = connectI + i
+    thisXI = ((i-1) %/% nY) + 1 #between 1 and nX
+    thisYI = ((i-1) %% nY) + 1 #between 1 and nY
+    
+    #change from torus to R2 topology by removing certain comparisons
+    thisRemoveMask = rep(FALSE, length(thisConnectI))
+    if(thisXI > nX - maxIndexDist)
+      thisRemoveMask = thisRemoveMask | xI > nX - thisXI
+    if(thisYI > nY - maxIndexDist)
+      thisRemoveMask = thisRemoveMask | yI > nY - thisYI
+    #add the connections/comparisons for point i to the ID matrix
+    startI = (i-1)*length(connectI) + 1
+    endI = i*length(connectI)
+    
+    ID[startI:endI,] = cbind(i, thisConnectI)
+    removeMask[startI:endI] = thisRemoveMask
+  }
+  
+  #remove bad rows in ID matrix
+  ID = ID[!removeMask,]
+  # should end up having 
+  #243*243*63 + (2*243)*((1+2+3+4+5+6+7)*8-7) + 7^2*(7^2-1)/2 
+  #rows?
+  
+  #calculate vgram for each slice of HMax: each tsunami realization
+  for(i in 1:dim(residHMax)[1]) {
+    floodVals = c(residHMax[i,,])
+    if(i == 1) {
+      corG= vgram(gridL, floodVals, id=ID, type="correlogram")
+    }
+    else {
+      #concetenate vgram
+      corGslice = vgram(gridL, floodVals, id=ID, type="correlogram")
+      corG$d = c(VG$d, VGslice$d)
+      corG$vgram = c(VG$vgram, VGslice$vgram)
+    }
+  }
+  
+  #fit exponential variogram to data
+  maxDist = maxIndexDist*min(c(distPerCellX, distPerCellY))
+  a = mean(corG$vgram[corG$d < quantile(corG$d, .1)]) #nugget
+  r = maxDist # range
+  ys = corG$vgram
+  ds = list(ds=corG$d)
+  lower = list(a=0.00001, r=.00001)
+  upper = list(a=1, r=Inf)
+  #this is the correlogram function. Go to http://www.seas.upenn.edu/~ese502/NOTEBOOK/Part_II/4_Variograms.pdf 
+  #to get covariogram from variogram
+  fit = nls(ys ~ a*exp(-(ds)/r), start=list(a=a, r=r), lower=lower, 
+            upper=upper, data=ds, algorithm="port")
+  summary(fit)
+  
+  #get variogram coefficients
+  coefs = coef(fit)
+  a = coefs[1]
+  n = coefs[2]
+  r = coefs[3]
+  
+  #plot correlogram fit
+  expCorVGram = function(h) {
+    a*exp(-h/r)
+  }
+  xs = seq(0, maxDist, length=500)
+  
+  filteredCorG = filterVG(corG, pct=.1)
+  
+  pdf("expCorGramPlot.pdf", height=5, width=7)
+  plotVGMean(filteredCorG, main="Empirical and Exponential Correlogram Fit")
+  lines(xs, sqrt(expCorVGram(xs)), col="green")
+  dev.off()
+  
+  save(a, r, corG, file="fitExpCorGParams.RData")
+}
+
+#fits variogram
 fitVario = function() {
   
   #generate vgram data
@@ -244,7 +375,7 @@ fitVario = function() {
   filteredVG = filterVG(VG, pct=.1)
   
   pdf("expVGramPlot.pdf", height=5, width=7)
-  plotVGMean(filteredVG, main="Empirical and Exponential Variogram Fit")
+  plotVGMean(filteredVG, main="Empirical and Exponential Semi-Variogram Fit")
   lines(xs, sqrt(expVGram(xs)), col="green")
   dev.off()
   
