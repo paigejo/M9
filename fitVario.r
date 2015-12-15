@@ -197,14 +197,14 @@ fitCorrelo = function() {
     else {
       #concetenate vgram
       corGslice = vgram(gridL, floodVals, id=ID, type="correlogram")
-      corG$d = c(VG$d, VGslice$d)
-      corG$vgram = c(VG$vgram, VGslice$vgram)
+      corG$d = c(corG$d, corGslice$d)
+      corG$vgram = c(corG$vgram, corGslice$vgram)
     }
   }
   
   #fit exponential variogram to data
   maxDist = maxIndexDist*min(c(distPerCellX, distPerCellY))
-  a = mean(corG$vgram[corG$d < quantile(corG$d, .1)]) #nugget
+  a = mean(corG$vgram[corG$d < quantile(corG$d, .1)]) #correlation at 0 distance
   r = maxDist # range
   ys = corG$vgram
   ds = list(ds=corG$d)
@@ -219,8 +219,11 @@ fitCorrelo = function() {
   #get variogram coefficients
   coefs = coef(fit)
   a = coefs[1]
-  n = coefs[2]
+  # n = coefs[2]
   r = coefs[3]
+  
+  #save results
+  save(a, r, corG, file="fitExpCorGParams.RData")
   
   #plot correlogram fit
   expCorVGram = function(h) {
@@ -232,10 +235,8 @@ fitCorrelo = function() {
   
   pdf("expCorGramPlot.pdf", height=5, width=7)
   plotVGMean(filteredCorG, main="Empirical and Exponential Correlogram Fit")
-  lines(xs, sqrt(expCorVGram(xs)), col="green")
+  lines(xs, expCorVGram(xs), col="green")
   dev.off()
-  
-  save(a, r, corG, file="fitExpCorGParams.RData")
 }
 
 #fits variogram
