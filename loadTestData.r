@@ -102,7 +102,43 @@ loadDeformations = function() {
   return(out)
 }
 
-
+loadAllDeformations = function() {
+  wd = getwd()
+  setwd("~/git/M9/CSZR")
+  
+  #topography data files
+  files = system("ls *.tt3", intern=TRUE)
+  
+  #NOTE: CSZ_SS3_Defm_FINAL.tt3 has slightly different dx, dy, dt.
+  #Instead of 0.0166, 0.0166, and 0.5, it's 0.0167, 0.0167, and 1
+  #respectively
+  
+  for(f in 1:length(files)) {
+    if(f == 1) {
+      out = loadTopo(files[f])
+      out$dat = out$dat[,,out$mt]
+    }
+    else {
+      #concatenate data in out list:
+      tmp = loadTopo(files[f])
+      out$dat = abind(out$dat, tmp$dat[,,tmp$mt], along=3)
+      out$mx = c(out$mx, tmp$mx)
+      out$my = c(out$my, tmp$my)
+      out$mt = c(out$mt, tmp$mt)
+      out$xlower = c(out$xlower, tmp$xlower)
+      out$ylower = c(out$ylower, tmp$ylower)
+      out$t0 = c(out$t0, tmp$t0)
+      out$dx = c(out$dx, tmp$dx)
+      out$dy = c(out$dy, tmp$dy)
+      out$dt = c(out$dt, tmp$dt)
+    }
+  }
+  
+  #set wd back to what it was before
+  setwd(wd)
+  
+  return(out)
+}
 
 
 
