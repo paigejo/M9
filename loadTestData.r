@@ -99,7 +99,7 @@ loadTopo = function(fname) {
   return(out)
 }
 
-plotTopo = function(topoDat) {
+plotTopo = function(topoDat, ...) {
   lon = topoDat$lon
   lat = topoDat$lat
   dat = topoDat$dat
@@ -107,7 +107,10 @@ plotTopo = function(topoDat) {
     dat = dat[,,2]
   }
   grid = make.surface.grid(list(lon=lon, lat=lat))
-  quilt.plot(grid, dat, main="Topography/Bathymetry Data")
+  otherArgs = list(...)
+  if(is.null(otherArgs$main))
+    otherArgs$main = "Topography/Bathymetry Data"
+  do.call("quilt.plot", c(list(grid, dat), otherArgs))
   invisible(NULL)
 }
 

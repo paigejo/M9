@@ -1,0 +1,15 @@
+cascadia/
+cascadia2/
+cascadia3/
+chile2010/
+CSZR/
+eg/
+#*.rds
+#*.tar.gz
+#*.zip
+*.tar
+*.gz
+*.log
+*.aux
+*.cls
+*.rda
