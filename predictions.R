@@ -1,4 +1,4 @@
-library(corpcor) # for fast computation of pseudoinverse
+
 
 
 # Function for compute conditional mean and variance for normal distribution given data.

@@ -477,7 +477,7 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
   #   corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta, 
   #                              onlyUpper=TRUE, Distance="rdist.earth", 
   #                              Dist.args=list(miles=FALSE), smoothness=nuZeta)
-  tmpParams = rep(1, 5)
+  # tmpParams = rep(1, 5)
   # corMatCSZ = arealZetaCov(tmpParams, csz, nDown1=9, nStrike1=12)
   # load the precomputed correlation matrix
   load("arealCSZCor.RData")
@@ -535,10 +535,11 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
   ci = ci/sum(ci)
   muXiMLE = sum((logX-muZetaGPS)*ci)
   
+  # params is in order: lambda, muZeta, sigmaZeta, lambda0, muXi
   if(is.null(muVec))
     MLEs = c(opt$par, 0.25, muXiMLE)
   else
-    MLEs = c(opt$par, NA, 0.25, muXiMLE)
+    MLEs = c(opt$par[1], NA, opt$par[2], 0.25, muXiMLE)
   
   # Return results
   list(MLEs=MLEs, lambdaMLE=lambdaMLE, muZetaMLE=muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambda0MLE=0.25, 

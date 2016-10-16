@@ -1950,7 +1950,7 @@ traceplot(newMu$allStanResults[[2]], inc_warmup=TRUE,
                  "beta[184]", "beta[185]", "beta[186]", 
                  "beta[187]", "beta[188]", "beta[189]"))
 
-system.time(test <- fitModelIterative(maxIter=5, niterMCMC=5000)) #params fit maxIter times, mean fit maxIter-1 times
+system.time(test <- fitModelIterative(maxIter=2, niterMCMC=250)) #params fit maxIter times, mean fit maxIter-1 times
 save(testInputs, file="testInputs.RData")
 load("testInputs.RData")
 parFit = doFixedFit(testInputs[[1]], testInputs[[2]], testInputs[[3]], testInputs[[4]], testInputs[[5]], testInputs[[6]])
