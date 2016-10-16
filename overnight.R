@@ -57,3 +57,8 @@ MLEs = fixedFitMVN$MLEs
 
 print(system.time(testResults <- fitModelIterative(maxIter=3, niterMCMC=250))) #params fit maxIter times, mean fit maxIter-1 times
 save(testResults, file="testResults.RData")
+
+print(system.time(testResults <- fitModelIterative(maxIter=5, niterMCMC=500, loadDat="interactiveFit.RData"))) #params fit maxIter times, mean fit maxIter-1 times
+
+
+

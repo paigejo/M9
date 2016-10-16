@@ -34,9 +34,9 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
   }
   else {
     lambda = params[1]
-    sigmaZeta = params[2]
-    lambda0 = params[3]
-    muXi = params[4]
+    sigmaZeta = params[3]
+    lambda0 = params[4]
+    muXi = params[5]
     muZeta=muVec
   }
   
