@@ -153,18 +153,35 @@ doFullFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE) {
 
 ##### Computes the full data log likelihood given the parameters.
 ## inputs:
+# if muZeta is constant and passed as parameter:
 # params[1]: lambda
 # params[2]: muZeta
 # params[3]: sigmaZeta
 # params[4]: lambda0
-# NOTE: params[5] was muXi but there is an easy conditional estimate of this
+# if muZeta is vector with muZeta = c(muZetaPoint, muZetaAreal):
+# params[1]: lambda
+# params[2]: sigmaZeta
+# params[3]: lambda0
 fullDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gpsDat=slipDatCSZ, 
-                          nsim=500, useMVNApprox=FALSE) {
+                          nsim=500, useMVNApprox=FALSE, muZeta=NULL) {
   ##### get parameters
-  lambda = params[1]
-  muZeta = params[2]
-  sigmaZeta = params[3]
-  lambda0 = params[4]
+  if(is.null(muZeta)) {
+    lambda = params[1]
+    muZeta = params[2]
+    sigmaZeta = params[3]
+    lambda0 = params[4]
+    muZetaGPS = muZeta
+    muZetaCSZ = muZeta
+    vecMu=FALSE
+  }
+  else {
+    lambda = params[1]
+    sigmaZeta = params[2]
+    lambda0 = params[3]
+    muZetaGPS = muZeta[1:nrow(gpsDat)]
+    muZetaCSZ = muZeta[(nrow(gpsDat)+1):length(muZeta)]
+    vecMu=TRUE
+  }
   
   ##### compute unit slip Okada seadef if necessary
   if(is.null(lastParams) || lastParams[4] != lambda0) {
@@ -195,19 +212,25 @@ fullDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gps
   ##### Compute Likelihood of subsidence and GPS data
   # sub = subsidenceLnLik(G, cszDepths, SigmaZetaCSZL, lambda, muZeta, nsim=nsim)
   if(!useMVNApprox)
-    sub = subsidenceLnLikMod(G, cszDepths, SigmaZetaCSZL, lambda, muZeta, nsim=nsim)
+    sub = subsidenceLnLikMod(G, cszDepths, SigmaZetaCSZL, lambda, muZetaCSZ, nsim=nsim)
   else {
     SigmaZeta = SigmaZetaCSZL %*% t(SigmaZetaCSZL)
-    sub = subsidenceLnLikMod2(muZeta, lambda, sigmaZeta, SigmaZeta, G)
+    sub = subsidenceLnLikMod2(muZetaCSZ, lambda, sigmaZeta, SigmaZeta, G)
   }
-  GPS = GPSLnLik(muZeta, SigmaZetaGPS, gpsDat)
+  GPS = GPSLnLik(muZetaGPS, SigmaZetaGPS, gpsDat)
   lnLik = sub[1] + GPS
   lnLikSE = sub[2]
   
   ##### update parameter optimization table
   newRow = rbind(c(params, lnLik, sub[1], GPS, lnLikSE))
-  colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lambda0", "lnLik", 
-                       "subLnLik", "GPSLnLik", "lnLikSE")
+  if(!vecMu) {
+    colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lambda0", "lnLik", 
+                         "subLnLik", "GPSLnLik", "lnLikSE")
+  }
+  else {
+    colnames(newRow) = c("lambda", "sigmaZeta", "lambda0", "lnLik", 
+                         "subLnLik", "GPSLnLik", "lnLikSE")
+  }
   print(newRow)
   optimTable <<- rbind(optimTable, newRow)
   
@@ -230,7 +253,8 @@ fullDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gps
 ## inputs:
 # muXi: mean of MVN in exponent of xi (vector of GPS slip values).  NOTE:
 # this input is no longer required.  It is estimated w/in the fxn
-# muZeta: mean of GP in exponent of Zeta (constant)
+# muZeta: mean of GP in exponent of Zeta (constant).  If vector then must be 
+#         same length as GPS data
 # SigmaZeta: Covariance of exponent of zeta (of dimension |sigmaXi|)
 # gpsDat: GPS data restricted to CSZ fault geometry
 # logt: log taper values evaluated at the GPS data
@@ -244,7 +268,7 @@ GPSLnLik = function(muZeta, SigmaZeta, gpsDat=slipDatCSZ, logt = rep(0, length(s
   logX = log(gpsDat$slip)
   ci = 1/sigmaXi^2
   ci = ci/sum(ci)
-  muXi = sum(logX*ci) - muZeta
+  muXi = sum((logX-muZeta)*ci)
   
   # center log GPS data so its mean is 0
   logXCntr = logX - muXi - muZeta - logt
@@ -302,6 +326,8 @@ getGPSSubfaultDepths = function() {
 # same and subsidenceLnLik but cheats a tad to be faster.  Downside is lnLik SE 
 # estimate is anti-conservative.  Uses MC Likelihood estimation, but doesn't 
 # assume normality of subsidence data.
+# muZeta: mean of log zeta field areal average values.  If vector must be 
+#         same length as nrow(fault)
 subsidenceLnLikMod = function(G, cszDepths, SigmaZetaL, lambda, muZeta, nsim=3000, 
                               subDat=dr1) {
   # m is number of csz subfaults
@@ -400,16 +426,21 @@ subsidenceLnLikMod = function(G, cszDepths, SigmaZetaL, lambda, muZeta, nsim=300
 # fitting functions assuming lambda0 (okada model elasticity) is fixed at 0.25
 
 ##### function for performing full MLE fit of model
+# if muVec not included, params are of form:
 # params[1]: lambda
 # params[2]: muZeta
 # params[3]: sigmaZeta
 # params[4]: lambda0
-# NOTE: params[5]: muXi is not required since it's estimated conditionally
+# otherwise, they are of form:
+# params[1]: lambda
+# params[2]: sigmaZeta
+# params[3]: lambda0
+# NOTE: muXi is not required since it's estimated conditionally
 # NOTE: currently the Okada model is the most time-consuming step in the optimization.
 #       It may help to do block optimization, fixing lambda0 for a while before changing it.
 #       Alternatively, we could assume lambda0=0.25 as is often done.
 doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slipDatCSZ, 
-                      corMatGPS=NULL) {
+                      corMatGPS=NULL, muVec=NULL) {
   ##### Set up initial parameter guesses for the MLE optimization if necessary
   if(is.null(initParams)) {
     lambdaInit=2
@@ -420,8 +451,20 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
     # sigmaZetaInit = sqrt(log(var(dr1$subsidence)) - 2*muZetaInit)
     sigmaZetaInit = 1
     # muXiInit = log(2.25) # based on plots from exploratory analysis
-    initParams = c(lambdaInit, muZetaInit, sigmaZetaInit)
+    if(is.null(muVec))
+      initParams = c(lambdaInit, muZetaInit, sigmaZetaInit)
+    else
+      initParams = c(lambdaInit, sigmaZetaInit)
   }
+  
+  # make sure correct parameter vector format is given if muZeta is a vector
+  if(!is.null(muVec)) {
+    if(length(initParams) > 2)
+      initParams = c(initParams[1], initParams[3]) # lambda and sigmaZeta
+  }
+  
+  # set GPS and CSZ mean fields
+  
   
   phiZeta = 232.5722 # MLE based on fitGPSCovariance result
   nuZeta = 3/2 # we assume this is the Matern smoothness parameter
@@ -457,15 +500,26 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
   opt = optim(initParams, fixedDataLogLik, control=controls, hessian=TRUE, 
               cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
               phiZeta=phiZeta, gpsDat=gpsDat, nsim=nsim, 
-              useMVNApprox=useMVNApprox)
+              useMVNApprox=useMVNApprox, muZeta=muVec)
   
   # test = fullDataLogLik(initParams, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
   # phiZeta=phiZeta, slipDatCSZ=slipDatCSZ)
   
   # get results of optimization
-  lambdaMLE = opt$par[1]
-  muZetaMLE = opt$par[2]
-  sigmaZetaMLE = opt$par[3]
+  if(is.null(muVec)) {
+    lambdaMLE = opt$par[1]
+    muZetaMLE = opt$par[2]
+    sigmaZetaMLE = opt$par[3]
+    muZetaGPS = muZetaMLE
+    muZetaCSZ = muZetaMLE
+  }
+  else {
+    lambdaMLE = opt$par[1]
+    sigmaZetaMLE = opt$par[2]
+    muZetaMLE=muVec
+    muZetaGPS = muVec[1:nrow(gpsDat)]
+    muZetaCSZ = muVec[(nrow(gpsDat)+1):length(muVec)]
+  }
   logLikMLE = opt$value
   hess = opt$hessian
   
@@ -479,25 +533,46 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
   logX = log(gpsDat$slip)
   ci = 1/sigmaXi^2
   ci = ci/sum(ci)
-  muXiMLE = sum(logX*ci) - muZetaMLE
+  muXiMLE = sum((logX-muZetaGPS)*ci)
+  
+  if(is.null(muVec))
+    MLEs = c(opt$par, 0.25, muXiMLE)
+  else
+    MLEs = c(opt$par, NA, 0.25, muXiMLE)
   
   # Return results
-  list(MLEs=c(opt$par, 0.25, muXiMLE), lambdaMLE=lambdaMLE, muZetaMLE = muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambda0MLE=0.25, 
+  list(MLEs=MLEs, lambdaMLE=lambdaMLE, muZetaMLE=muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambda0MLE=0.25, 
        muXiMLE=muXiMLE, logLikMLE=logLikMLE, hess=hess, optimTable=optimTable)
 }
 
 ##### Computes the full data log likelihood given the parameters.
 ## inputs:
+# if muZeta not provided directly, then:
 # params[1]: lambda
 # params[2]: muZeta
 # params[3]: sigmaZeta
-# NOTE: params[5] was muXi but there is an easy conditional estimate of this
+# else:
+# params[1]: lambda
+# params[2]: sigmaZeta
+# NOTE: muXi was provided but there is an easy conditional estimate of this
 fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gpsDat=slipDatCSZ, 
-                           subDat=dr1, nsim=500, useMVNApprox=FALSE, verbose=TRUE) {
+                           subDat=dr1, nsim=500, useMVNApprox=FALSE, verbose=TRUE, muZeta=NULL) {
   ##### get parameters
-  lambda = params[1]
-  muZeta = params[2]
-  sigmaZeta = params[3]
+  if(is.null(muZeta)) {
+    lambda = params[1]
+    muZeta = params[2]
+    sigmaZeta = params[3]
+    muZetaGPS = muZeta
+    muZetaCSZ = muZeta
+    vecMu=FALSE
+  }
+  else {
+    lambda = params[1]
+    sigmaZeta = params[2]
+    muZetaGPS = muZeta[1:nrow(gpsDat)]
+    muZetaCSZ = muZeta[(nrow(gpsDat)+1):length(muZeta)]
+    vecMu=TRUE
+  }
   lambda0 = 0.25
   
   ##### compute unit slip Okada seadef if necessary
@@ -514,9 +589,18 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gp
   
   ##### make sure params are in correct range and update optimTable
   if(lambda < 0 || sigmaZeta < 0) {
-    newRow = rbind(c(params, -10000, -5000, -5000, NA))
-    colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
-                         "subLnLik", "GPSLnLik", "lnLikSE")
+    if(vecMu)
+      newRow = rbind(c(params[1:2], -10000, -5000, -5000, NA))
+    else
+      newRow = rbind(c(params, -10000, -5000, -5000, NA))
+    if(!vecMu) {
+      colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
+                           "subLnLik", "GPSLnLik", "lnLikSE")
+    }
+    else {
+      colnames(newRow) = c("lambda", "sigmaZeta", "lnLik", 
+                           "subLnLik", "GPSLnLik", "lnLikSE")
+    }
     if(verbose)
       print(newRow)
     optimTable <<- rbind(optimTable, newRow)
@@ -530,20 +614,27 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gp
   ##### Compute Likelihood of subsidence and GPS data
   # sub = subsidenceLnLik(G, cszDepths, SigmaZetaCSZL, lambda, muZeta, nsim=nsim)
   if(!useMVNApprox)
-    sub = subsidenceLnLikMod(G, cszDepths, SigmaZetaCSZL, lambda=0.25, muZeta, nsim=nsim)
+    sub = subsidenceLnLikMod(G, cszDepths, SigmaZetaCSZL, lambda=0.25, muZetaCSZ, nsim=nsim)
   else {
     SigmaZeta = SigmaZetaCSZL %*% t(SigmaZetaCSZL)
-    sub = subsidenceLnLikMod2(muZeta, lambda, sigmaZeta, SigmaZeta, G, subDat=subDat)
+    sub = subsidenceLnLikMod2(muZetaCSZ, lambda, sigmaZeta, SigmaZeta, G, subDat=subDat)
   }
     
-  GPS = GPSLnLik(muZeta, SigmaZetaGPS, gpsDat)
+  GPS = GPSLnLik(muZetaGPS, SigmaZetaGPS, gpsDat)
   lnLik = sub[1] + GPS
   lnLikSE = sub[2]
   
   ##### update parameter optimization table
-  newRow = rbind(c(params, lnLik, sub[1], GPS, lnLikSE))
-  colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
-                       "subLnLik", "GPSLnLik", "lnLikSE")
+  if(!vecMu) {
+    newRow = rbind(c(params, lnLik, sub[1], GPS, lnLikSE))
+    colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
+                         "subLnLik", "GPSLnLik", "lnLikSE")
+  }
+  else {
+    newRow = rbind(c(params[1:2], lnLik, sub[1], GPS, lnLikSE))
+    colnames(newRow) = c("lambda", "sigmaZeta", "lnLik", 
+                         "subLnLik", "GPSLnLik", "lnLikSE")
+  }
   if(verbose)
     print(newRow)
   optimTable <<- rbind(optimTable, newRow)
@@ -565,6 +656,7 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gp
 source("approxDistn.R")
 
 # Approximate the distribution of G %*% T %*% Zeta with a MVN to get likelihood
+# here muZeta can be either a constant or a vector of length ncol(G)
 subsidenceLnLikMod2 = function(muZeta, lambda, sigmaZeta, SigmaZeta, G, subDat=dr1) {
   # get vector of taper values
   tvec = taper(csz$depth, lambda = lambda)
@@ -885,5 +977,205 @@ subLikGivenAll = function(params, SigmaPtoD, SigmaD, GPred=NULL, GFit=NULL, gpsD
   
   logLikPred
 }
+
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+# functions for performing iterative mean-parameter estimation
+
+# fit model with nonstationary mean using iterative method and data imputation.  
+# params are updated (fitModelParams is called) maxIter times, and the mean is 
+# updated (fitModelMean is called) maxIter - 1 times.  loadDat is the name of 
+# an RData file containing the progress of this function, and if it it included 
+# this function will start again from where it left off when loadDat was saved.  
+# saveFile is the name of the RData file to save this function's progress to.  
+# other inputs are inputs to doFixedFit() and updateMu() functions (niterMCMC 
+# is the niter input to updateMu()).
+fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDat=slipDatCSZ, 
+                             corMatGPS=NULL, muVec=NULL, maxIter=5, fault=csz, niterMCMC=250, 
+                             loadDat=NULL, saveFile="iterFitProgress.RData") {
+  funIns = list(initParams=initParams, nsim=nsim, useMVNApprox=useMVNApprox, gpsDat=gpsDat, 
+                corMatGPS=corMatGPS, muVec=muVec, maxIter=maxIter, fault=fault, niterMCMC=niterMCMC)
+  
+  ##### Set up initial parameter guesses for the MLE optimization if necessary
+  if(is.null(initParams)) {
+    lambdaInit=2
+    muZetaInit = log(20)
+    # variance of a lognormal (x) is (exp(sigma^2) - 1) * exp(2mu + sigma^2)
+    # then sigma^2 = log(var(e^x)) - 2mu - log(e^(sigma^2) - 1)
+    # so sigma^2 \approx log(var(e^x)) - 2mu
+    # sigmaZetaInit = sqrt(log(var(dr1$subsidence)) - 2*muZetaInit)
+    sigmaZetaInit = 1
+    # muXiInit = log(2.25) # based on plots from exploratory analysis
+    initParams = c(lambdaInit, muZetaInit, sigmaZetaInit)
+  }
+  
+  # store each updated mean and MLE sets
+  env = environment()
+  assign("muMatCSZ", matrix(nrow=nrow(fault), ncol=0), envir=env)
+  assign("muMatGPS", matrix(nrow=nrow(slipDatCSZ), ncol=0), envir=env)
+  assign("parMat", matrix(nrow=5, ncol=0), envir=env)
+  assign("logLiks", c(), envir=env)
+  
+  # store optimization tables and other important things
+  assign("optimTables", list(), envir=env)
+  assign("lastStanResults", list(), envir=env)
+  assign("lastHess", c(), envir=env)
+  
+  #called maxIter times
+  fitModelParams = function(params, muVec=NULL, currIter=1) {
+    # save current progress
+    muMatCSZ=get("muMatCSZ", envir=env)
+    muMatGPS=get("muMatGPS", envir=env)
+    parMat=get("parMat", envir=env)
+    logLiks=get("logLiks", envir=env)
+    optimTables=get("optimTables", envir=env)
+    lastHess=get("lastHess", envir=env)
+    lastStanResults=get("lastStanResults", envir=env)
+    
+    state = list(muMatCSZ=muMatCSZ, muMatGPS=muMatGPS, parMat=parMat, logLiks=logLiks, 
+                 optimTables=optimTables, lastHess=lastHess, lastStanResults=lastStanResults)
+    subFunName = "fitModelParams"
+    subFunIns = list(params=params, muVec=muVec, currIter=currIter)
+    save(funIns, state, subFunName, subFunIns, file=saveFile)
+    
+    # base case: if past maxIter, resutrn results
+    if(currIter > maxIter)
+      return(list(params=params, muVec=muVec))
+    
+    print(paste0("fitting model parameters, current iteration is: ", currIter))
+    
+    # fit the parameters
+    parFit = doFixedFit(params, nsim, useMVNApprox, gpsDat, corMatGPS, muVec)
+#     list(MLEs=c(opt$par, 0.25, muXiMLE), lambdaMLE=lambdaMLE, muZetaMLE=muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambda0MLE=0.25, 
+#          muXiMLE=muXiMLE, logLikMLE=logLikMLE, hess=hess, optimTable=optimTable)
+    
+    # update parMat with new parameters
+    newPar = parFit$MLEs
+    parMat = get("parMat", envir=env)
+    if(length(newPar) < 5)
+      assign("parMat", cbind(parMat, c(newPar[1], NA, newPar[2:length(newPar)])), envir=env)
+    else
+      assign("parMat", cbind(parMat, newPar), envir=env)
+    
+    # update optimTables, hessian, logLik
+    optimTable = get("optimTables", envir=env)
+    logLiks = get("logLiks", envir=env)
+    assign("optimTables", c(optimTables, list(parFit$optimTable)), envir=env)
+    assign("lastHess", parFit$hess, envir=env)
+    assign("logLiks", c(logLiks, parFit$logLikMLE), envir=env)
+    
+    if(is.null(muVec))
+      return(fitModelMean(newPar, currIter=currIter+0.5))
+    else
+      return(fitModelMean(newPar, muVec, currIter=currIter+0.5))
+  }
+  
+  #called maxIter - 1  times
+  fitModelMean = function(params, muVec=params[2], currIter=1) {
+    # save current progress
+    muMatCSZ=get("muMatCSZ", envir=env)
+    muMatGPS=get("muMatGPS", envir=env)
+    parMat=get("parMat", envir=env)
+    logLiks=get("logLiks", envir=env)
+    optimTables=get("optimTables", envir=env)
+    lastHess=get("lastHess", envir=env)
+    lastStanResults=get("lastStanResults", envir=env)
+    
+    state = list(muMatCSZ=muMatCSZ, muMatGPS=muMatGPS, parMat=parMat, logLiks=logLiks, 
+                 optimTables=optimTables, lastHess=lastHess, lastStanResults=lastStanResults)
+    subFunName = "fitModelMean"
+    subFunIns = list(params=params, muVec=muVec, currIter=currIter)
+    save(funIns, state, subFunName, subFunIns, file=saveFile)
+    
+    # base case: if past maxIter, resutrn results
+    if(currIter > maxIter) {
+      return(list(params=params, muVec=muVec))
+    }
+    print(paste0("fitting model mean, current iteration is: ", currIter))
+    
+    newMu = updateMu(params, muVec=muVec, fault=csz, niter=niterMCMC)
+#     list(newMu=newMu, varMat=varMat, muMat=muMat, Sigmas=Sigmas, 
+#          newMuSub=newMuSub, newMuPoint=newMuPoint, 
+#          varMatPoint=varMatPoint, muMatPoint=muMatPoint, SigmasPoint=SigmasPoint, 
+#          newMuSubPoint=newMuSubPoint, allStanResults=allStanResults)
+    
+    # update muMat
+    muMatCSZ = get("muMatCSZ", envir=env)
+    muMatGPS = get("muMatGPS", envir=env)
+    lastStanResults = get("lastStanResults", envir=env)
+    assign("muMatCSZ", cbind(muMatCSZ, newMu$newMu), envir=env)
+    assign("muMatGPS", cbind(muMatGPS, newMu$newMuPoint), envir=env)
+    assign("lastStanResults", newMu$allStanResults, envir=env)
+    
+    return(fitModelParams(params, c(newMu$newMuPoint, newMu$newMu), currIter=currIter+0.5))
+  }
+  
+  # run the iterative model (either from where it left off or the beginning)
+  if(!is.null(loadDat)) {
+    # since user input previous progress, start from there
+    
+    # load the data 
+    # loadDat contains: funIns, state, subFunName, and subFunIns
+    # (lastIns should now be overwritten.)
+    load(loadDat)
+    
+    # get state where last left off
+    assign("muMatCSZ", state$muMatCSZ, envir=env)
+    assign("muMatGPS", state$muMatGPS, envir=env)
+    assign("parMat", state$parMat, envir=env)
+    assign("logLiks", state$logLiks, envir=env)
+    assign("optimTables", state$optimTables, envir=env)
+    assign("lastHess", state$lastHess, envir=env)
+    assign("lastStanResults", state$lastStanResults, envir=env)
+    
+    # get function inputs where last left off
+    initParams=funIns$initParams
+    nsim=funIns$nsim
+    useMVNApprox=funIns$useMVNApprox
+    gpsDat=funIns$gpsDat
+    corMatGPS=funIns$corMatGPS
+    muVec=funIns$muVec
+    maxIter=funIns$maxIter
+    fault=funIns$fault
+    niterMCMC=funIns$niterMCMC
+    
+    # run iterative method from where we left off
+    out = do.call(subFunName, subFunIns)
+  }
+  else{
+    # run the iterative method from the beginning
+    out = fitModelParams(initParams, currIter=1)
+  }
+  
+  # get results
+  parMat = get("parMat", envir=env)
+  optimTable = get("optimTables", envir=env)
+  lastHess = get("lastHess", envir=env)
+  logLiks = get("logLiks", envir=env)
+  muMatCSZ = get("muMatCSZ", envir=env)
+  muMatGPS = get("muMatGPS", envir=env)
+  lastStanResults=get("lastStanResults", envir=env)
+  MLEs = out$params
+  muVec = out$muVec
+  muVecGPS = muVec[1:nrow(gpsDat)]
+  muVecCSZ = muVec[(nrow(gpsDat)+1):length(muVec)]
+  
+  # return results
+  return(list(MLEs=MLEs, muVecGPS=muVecGPS, muVecCSZ=muVecCSZ, muMatGPS=muMatGPS, muMatCSZ=muMatCSZ, 
+              parMat=parMat, logLiks=logLiks, optimTables=optimTables, hess=lastHess, 
+              lastStanResults=lastStanResults))
+}
+
+
+
+
+
+
+
+
 
 

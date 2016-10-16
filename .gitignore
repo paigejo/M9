@@ -13,3 +13,4 @@ eg/
 *.aux
 *.cls
 *.rda
+*.RData

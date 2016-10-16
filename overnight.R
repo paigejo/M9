@@ -1,4 +1,5 @@
 library(fields)
+library(rstan)
 setwd("~/git/M9/")
 source("taper.R")
 source("okada.R")
@@ -13,8 +14,8 @@ source("exploratoryAnalysisFuns.R") # -418.9, 319
 load("fixedFit_MVN.RData")
 MLEs = fixedFitMVN$MLEs
 
-# fullFit = doFullFit(c(1.557515, 1.165601, 0.7544919, 8.88326), nsim=50000)
-# fixedFit = doFixedFit(c(1.557515, 1.165601, 0.7544919), nsim=10000)
+fullFit = doFullFit(c(1.557515, 1.165601, 0.7544919, 8.88326), nsim=50000)
+fixedFit = doFixedFit(c(1.557515, 1.165601, 0.7544919), nsim=10000)
 
 fullFit = doFullFit(nsim=50000)
 fixedFit = doFixedFit(nsim=50000)

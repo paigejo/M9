@@ -1759,7 +1759,7 @@ xd = cbind(slipDatCSZ$lon, slipDatCSZ$lat)
 xp = cbind(csz$longitude, csz$latitude)
 
 # generate the predictions
-gpsPreds = predsGivenGPS(MLEs, 1000)
+gpsPreds = predsGivenGPS(MLEs, 10)
 fullPreds = genFullPredsMVN(MLEs, 1000)
 fullPreds10 = genFullPredsMVN(MLEs, 1000, 100) # add additional uncertainty to gps dat SD
 
@@ -1801,12 +1801,12 @@ map("world", "Canada", add=TRUE, lwd=1.5)
 US(add=TRUE, lwd=1.5)
 plotFault(faultGeom, plotData=FALSE, new=FALSE)
 
-quilt.plot(xd, fullMucX, main="Full Mean")
+quilt.plot(xd, fullMucX10, main="Full Mean")
 map("world", "Canada", add=TRUE, lwd=1.5)
 US(add=TRUE, lwd=1.5)
 plotFault(faultGeom, plotData=FALSE, new=FALSE)
 
-quilt.plot(xd, fullSDX, main="Full SD")
+quilt.plot(xd, fullSDX10, main="Full SD")
 map("world", "Canada", add=TRUE, lwd=1.5)
 US(add=TRUE, lwd=1.5)
 plotFault(faultGeom, plotData=FALSE, new=FALSE)
@@ -1852,12 +1852,105 @@ map("world", "Canada", add=TRUE, lwd=1.5)
 US(add=TRUE, lwd=1.5)
 
 # Generate subsidence predictions
-gpsSubs = predsToSubsidence(MLEs, gpsPreds, useMVNApprox = FALSE)
+gpsSubs = predsToSubsidence(MLEs, gpsPreds)
 fullSubs = predsToSubsidence(MLEs, fullPreds, useMVNApprox = FALSE)
 fullSubs10 = predsToSubsidence(MLEs, fullPreds10, useMVNApprox = FALSE)
-comparePredsToSubs(MLEs, slipPreds=gpsPreds, subPreds=gpsSubs, nsim=1000, 
-                   plotNameRoot="gpsSigmac", savePlots=TRUE)
 comparePredsToSubs(MLEs, slipPreds=fullPreds, subPreds=fullSubs, nsim=1000, 
-                              plotNameRoot="fullSigmac", savePlots=TRUE)
+                              plotNameRoot="full", savePlots=FALSE)
 comparePredsToSubs(MLEs, slipPreds=fullPreds10, subPreds=fullSubs10, nsim=1000, 
-                   plotNameRoot="full100Sigmac", savePlots=TRUE)
+                   plotNameRoot="full", savePlots=FALSE)
+
+##### test updateMu function (6665 seconds for 5000 iter)
+system.time(test <- updateMu(MLEs, fault=csz, niter=10))
+system.time(newMu <- updateMu(MLEs, fault=csz, niter=5000))
+save(newMu, file="newMu.RData")
+load("newMu.RData")
+
+clim1=range(c(newMu$muMat[,19], newMu$newMu))
+plotFault(csz, newMu$muMat[,19], varRange = clim1)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+plotFault(csz, newMu$newMu, varRange = clim1)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+
+clim2=range(c(sqrt(diag(newMu$Sigmas[[19]])), sqrt(diag(newMu$varMat))))
+plotFault(csz, sqrt(diag(newMu$Sigmas[[19]])), varRange = clim2)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+plotFault(csz, sqrt(diag(newMu$varMat)), varRange = clim2)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+
+#
+sdMat = newMu$muMat
+for(i in 1:ncol(newMu$muMat)) {
+  sdMat[,i] = sqrt(diag(newMu$Sigmas[[i]]))
+}
+VarMat = sdMat^2
+W = 1/VarMat
+
+## calculate new mean estimate based only on subsidence and its variance matrix
+sampleSize=19
+W = W[,1:(sampleSize-1)]
+W = sweep(W, 1, rowSums(W), "/")
+newMuSub = rowSums(W*newMu$muMat[,1:(sampleSize-1)])
+varMatSub = matrix(0, nrow=nrow(csz), ncol=nrow(csz))
+for(k in 1:(sampleSize-1)) {
+  thisVar = newMu$Sigmas[[k]]
+  thisWeights = W[,k]
+  thisVar = sweep(sweep(thisVar, 1, thisWeights, "*"), 2, thisWeights, "*")
+  varMatSub = varMatSub + thisVar
+}
+
+# GPS mean
+clim1=range(c(newMu$muMat[,19], newMu$newMu))
+plotFault(csz, newMu$muMat[,19], varRange = clim1)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+# overall mean
+plotFault(csz, newMu$newMu, varRange = clim1)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+# subsidence mean
+plotFault(csz, newMuSub)
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+# subsidence SD
+plotFault(csz, sqrt(diag(varMatSub)))
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+
+# compare predictions versus subsidence data
+par(mfrow=c(1,2))
+T1 = dr1[events == "T1",]
+plotFault(csz, exp(newMu$muMat[,18]), main="Median T1 Predicted Slip (m)")
+map("world", "Canada", add=TRUE, lwd=1.5)
+US(add=TRUE, lwd=1.5)
+points(T1$Lon, T1$Lat, pch="+", col="red")
+
+quilt.plot(T1$Lon, T1$Lat, T1$subsidence)
+map("world", "Canada", add=TRUE, lwd=1.5, main="Observed T1 Subsidence (m)", 
+    xlab="Longitude")
+US(add=TRUE, lwd=1.5)
+
+# get seismic moments for imputed earthquakes
+mags = c()
+usedEvents = c(uniqueEvents[-c(1,2,5)], "GPS", "Avg")
+for(i in 1:ncol(newMu$muMat)) {
+  mags = c(mags, getMomentFromSlip(exp(newMu$muMat[,i])))
+}
+mags = c(mags, print(getMomentFromSlip(exp(newMu$newMu))))
+print(cbind(usedEvents, mags))
+  
+# do traceplots of the stan results:
+traceplot(newMu$allStanResults[[1]])
+traceplot(newMu$allStanResults[[2]], inc_warmup=TRUE, 
+          pars=c("beta[181]", "beta[182]", "beta[183]", 
+                 "beta[184]", "beta[185]", "beta[186]", 
+                 "beta[187]", "beta[188]", "beta[189]"))
+
+system.time(test <- fitModelIterative(maxIter=5, niterMCMC=5000)) #params fit maxIter times, mean fit maxIter-1 times
+save(testInputs, file="testInputs.RData")
+load("testInputs.RData")
+parFit = doFixedFit(testInputs[[1]], testInputs[[2]], testInputs[[3]], testInputs[[4]], testInputs[[5]], testInputs[[6]])
