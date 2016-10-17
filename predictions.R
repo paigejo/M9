@@ -23,7 +23,7 @@ conditionalNormal = function(Xd, muP, muD, SigmaP, SigmaD, SigmaPtoD) {
 # Function for generating simulations from the model predictive distribution given 
 # the GPS data.  Same is predsGivenGPS but also generates predictions and 
 # simulations at GPS coordinates
-predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
+predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ, fault=csz) {
   # get fit MLEs
   if(is.null(muVec)) {
     lambda = params[1]
@@ -34,6 +34,9 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
     muZetaGPS = muZeta
   }
   else {
+    if(length(muVec) == 1)
+      muVec = rep(muVec, nrow(gpsDat) + nrow(fault))
+    
     lambda = params[1]
     sigmaZeta = params[3]
     lambda0 = params[4]
@@ -60,7 +63,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
   # compute relevant covariances
   load("arealCSZCor.RData")
   SigmaB = arealCSZCor * sigmaZeta^2
-  SigmaSB = pointArealZetaCov(params, xs, csz, nDown=9, nStrike=12)
+  SigmaSB = pointArealZetaCov(params, xs, fault, nDown=9, nStrike=12)
   SigmaS = stationary.cov(xs, Covariance="Matern", theta=phiZeta, 
                           smoothness=nuZeta, Distance="rdist.earth", 
                           Dist.args=list(miles=FALSE)) * sigmaZeta^2
@@ -88,7 +91,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
   # get prediction locations
   # get CSZ prediction coordinates
   xd = cbind(gpsDat$lon, gpsDat$lat)  # d is GPS locations
-  xp = cbind(csz$longitude, csz$latitude) # p is fault areal locations
+  xp = cbind(fault$longitude, fault$latitude) # p is fault areal locations
   nd = nrow(xd)
   np = nrow(xp)
   point = 1:nd
@@ -111,7 +114,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
   logZetaSims0 = SigmaL %*% zSims # each column is a zero mean simulation
   logZetaSims = sweep(logZetaSims0, 1, muc, "+") # add conditional mean to simulations
   zetaSims = exp(logZetaSims)
-  tvec = taper(c(csz$depth, gpsDat$Depth), lambda = lambda)
+  tvec = taper(c(fault$depth, gpsDat$Depth), lambda = lambda)
   slipSims = sweep(zetaSims, 1, tvec, FUN="*")
   
   # seperate areal average sims from GPS point location sims
@@ -920,13 +923,16 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
 
 # this function updates the estimate of the mean vector of log zeta by weighting the 
 # estimates of each earthquake by their variances.
-updateMu = function(params, muVec=params[2], fault=csz, niter=1000) {
+updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ) {
   # get fit MLEs
   lambda = params[1]
   muZeta = params[2]
   sigmaZeta = params[3]
   lambda0 = params[4]
   muXi = params[5]
+  
+  if(length(muVec) == 1)
+    muVec = rep(muVec, nrow(gpsDat) + nrow(fault))
   
   # precompute G
   nx = 300
@@ -945,12 +951,12 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000) {
   ## (for areal averages and point estimates over GPS data support)
   muMat = matrix(nrow=nrow(fault), ncol=sampleSize)
   sdMat = matrix(nrow=nrow(fault), ncol=sampleSize)
-  muMatPoint = matrix(nrow=nrow(slipDatCSZ), ncol=sampleSize)
-  sdMatPoint = matrix(nrow=nrow(slipDatCSZ), ncol=sampleSize)
+  muMatPoint = matrix(nrow=nrow(gpsDat), ncol=sampleSize)
+  sdMatPoint = matrix(nrow=nrow(gpsDat), ncol=sampleSize)
   Sigmas = list()
   SigmasPoint = list()
   W = matrix(nrow=nrow(fault), ncol=sampleSize)
-  WPoint = matrix(nrow=nrow(slipDatCSZ), ncol=sampleSize)
+  WPoint = matrix(nrow=nrow(gpsDat), ncol=sampleSize)
   allStanResults = list()
   
   # first get estimates of log zeta from subsidence data attributed to each event
@@ -998,7 +1004,7 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000) {
   newMu = rowSums(W*muMat)
   varMat = matrix(0, nrow=nrow(fault), ncol=nrow(fault))
   newMuPoint = rowSums(WPoint*muMatPoint)
-  varMatPoint = matrix(0, nrow=nrow(slipDatCSZ), ncol=nrow(slipDatCSZ))
+  varMatPoint = matrix(0, nrow=nrow(gpsDat), ncol=nrow(gpsDat))
   for(k in 1:sampleSize) {
     # areal values
     thisVar = Sigmas[[k]]
@@ -1021,7 +1027,7 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000) {
   newMuSub = rowSums(WSub*muMat[,1:(sampleSize-1)])
   varMatSub = matrix(0, nrow=nrow(fault), ncol=nrow(fault))
   newMuSubPoint = rowSums(WPointSub*muMatPoint[,1:(sampleSize-1)])
-  varMatSubPoint = matrix(0, nrow=nrow(slipDatCSZ), ncol=nrow(slipDatCSZ))
+  varMatSubPoint = matrix(0, nrow=nrow(gpsDat), ncol=nrow(gpsDat))
   for(k in 1:(sampleSize-1)) {
     #areal values
     thisVar = Sigmas[[k]]
