@@ -66,9 +66,9 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
                           Dist.args=list(miles=FALSE)) * sigmaZeta^2
   
   # now block them into predictions and data covariance matrices
-  SigmaP = cbind(rbind(SigmaB, SigmaSB), rbind(t(SigmaSB), SigmaS))
+  SigmaP = cbind(rbind(SigmaS, t(SigmaSB)), rbind(SigmaSB, SigmaB))
   SigmaD = SigmaS + diag(sigmaXi^2)
-  SigmaPtoD = rbind(t(SigmaSB), SigmaS)
+  SigmaPtoD = rbind(SigmaS, t(SigmaSB))
   
   # get block means
   muP = muZeta
@@ -91,8 +91,8 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
   xp = cbind(csz$longitude, csz$latitude) # p is fault areal locations
   nd = nrow(xd)
   np = nrow(xp)
-  areal = 1:np
-  point = (np+1):(np+nd)
+  point = 1:nd
+  areal = (nd+1):(np+nd)
   
   # Cholesky decomp used for simulations (don't add Sigmac because that 
   # can lead to non-physical results.  Here we just treat the mean as 
