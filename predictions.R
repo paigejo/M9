@@ -23,7 +23,7 @@ conditionalNormal = function(Xd, muP, muD, SigmaP, SigmaD, SigmaPtoD) {
 # Function for generating simulations from the model predictive distribution given 
 # the GPS data.  Same is predsGivenGPS but also generates predictions and 
 # simulations at GPS coordinates
-predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
+predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ) {
   # get fit MLEs
   if(is.null(muVec)) {
     lambda = params[1]
@@ -31,6 +31,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
     sigmaZeta = params[3]
     lambda0 = params[4]
     muXi = params[5]
+    muZetaGPS = muZeta
   }
   else {
     lambda = params[1]
@@ -38,6 +39,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
     lambda0 = params[4]
     muXi = params[5]
     muZeta=muVec
+    muZetaGPS = muVec[1:nrow(gpsDat)]
   }
   
   # set other relevant parameters
@@ -47,13 +49,13 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
   # Calculate the standard error vector of xi. Derivation from week 08_30_17.Rmd presentation.  
   # Transformation from additive error to  multiplicative lognormal model with asympototic 
   # median and variance matching.
-  sigmaXi = sqrt(log(.5*(sqrt(4*slipDatCSZ$slipErr^2/slipDatCSZ$slip^2 + 1) + 1)))
+  sigmaXi = sqrt(log(.5*(sqrt(4*gpsDat$slipErr^2/gpsDat$slip^2 + 1) + 1)))
   
   # get log GPS data
-  logX = log(slipDatCSZ$slip)
+  logX = log(gpsDat$slip)
   
   # get GPS data
-  xs = cbind(slipDatCSZ$lon, slipDatCSZ$lat)
+  xs = cbind(gpsDat$lon, gpsDat$lat)
   
   # compute relevant covariances
   load("arealCSZCor.RData")
@@ -71,9 +73,9 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
   # get block means
   muP = muZeta
   if(is.null(muVec))
-    muD = rep(muZeta + muXi, length(logX))
+    muD = rep(muZetaGPS + muXi, length(logX))
   else
-    muD = muZeta + muXi
+    muD = muZetaGPS + muXi
   
   # compute conditional normal mean and standard error in mean estimate
   Xd = logX
@@ -85,7 +87,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
   ##### marginal covariance structure, but we've conditionally updated the mean.
   # get prediction locations
   # get CSZ prediction coordinates
-  xd = cbind(slipDatCSZ$lon, slipDatCSZ$lat)  # d is GPS locations
+  xd = cbind(gpsDat$lon, gpsDat$lat)  # d is GPS locations
   xp = cbind(csz$longitude, csz$latitude) # p is fault areal locations
   nd = nrow(xd)
   np = nrow(xp)
@@ -109,7 +111,7 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL) {
   logZetaSims0 = SigmaL %*% zSims # each column is a zero mean simulation
   logZetaSims = sweep(logZetaSims0, 1, muc, "+") # add conditional mean to simulations
   zetaSims = exp(logZetaSims)
-  tvec = taper(c(csz$depth, slipDatCSZ$Depth), lambda = lambda)
+  tvec = taper(c(csz$depth, gpsDat$Depth), lambda = lambda)
   slipSims = sweep(zetaSims, 1, tvec, FUN="*")
   
   # seperate areal average sims from GPS point location sims
