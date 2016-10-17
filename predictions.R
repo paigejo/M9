@@ -978,7 +978,7 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000) {
   
   # now get predictions for log zeta given GPS data
   print("estimating log zeta for GPS data")
-  eventPreds = predsGivenGPSFull(params, nsim=2)
+  eventPreds = predsGivenGPSFull(params, nsim=2, muVec=muVec)
   # areal estimates
   muMat[,e+1] = eventPreds$muc
   sdMat[,e+1] = diag(eventPreds$Sigmac)
