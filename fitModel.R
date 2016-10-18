@@ -1140,7 +1140,8 @@ fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDa
     gpsDat=funIns$gpsDat
     corMatGPS=funIns$corMatGPS
     muVec=funIns$muVec
-    maxIter=funIns$maxIter
+#     maxIter=funIns$maxIter
+    funIns$maxIter = maxIter # in case we want to add more iterations later.
     fault=funIns$fault
     niterMCMC=funIns$niterMCMC
     

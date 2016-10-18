@@ -272,13 +272,19 @@ preds = function(params, nsim=100, fault=csz) {
 
 # generate predictions given only the parameter MLEs (no GPS or subsidence data) at 
 # GPS locations as well as areal averages over the fault grid cells.
-predsArealAndLoc = function(params, nsim=100, fault=csz) {
+predsArealAndLoc = function(params, nsim=100, fault=csz, gpsDat=slipDatCSZ, muVec=params[2]) {
   # get fit MLEs
   lambda = params[1]
   muZeta = params[2]
   sigmaZeta = params[3]
   lambda0 = params[4]
   muXi = params[5]
+  
+  # get vector mean
+  if(length(muVec) == 1)
+    muVec = rep(muVec, nrow(fault)+nrow(gpsDat))
+  muVecGPS = muVec[1:nrow(gpsDat)]
+  muVecCSZ = muVec[(nrow(gpsDat)+1):length(muVec)]
   
   # set other relevant parameters
   nuZeta = 3/2 # Matern smoothness
@@ -287,10 +293,10 @@ predsArealAndLoc = function(params, nsim=100, fault=csz) {
   # Calculate the standard error vector of xi. Derivation from week 08_30_17.Rmd presentation.  
   # Transformation from additive error to  multiplicative lognormal model with asympototic 
   # median and variance matching.
-  sigmaXi = sqrt(log(.5*(sqrt(4*slipDatCSZ$slipErr^2/slipDatCSZ$slip^2 + 1) + 1)))
+  sigmaXi = sqrt(log(.5*(sqrt(4*gpsDat$slipErr^2/gpsDat$slip^2 + 1) + 1)))
   
   # get CSZ prediction coordinates
-  xd = cbind(slipDatCSZ$lon, slipDatCSZ$lat)
+  xd = cbind(gpsDat$lon, gpsDat$lat)
   xp = cbind(fault$longitude, fault$latitude)
   nd = nrow(xd)
   np = nrow(xp)
@@ -309,16 +315,16 @@ predsArealAndLoc = function(params, nsim=100, fault=csz) {
   }
   SigmaD = stationary.cov(xd, Covariance="Matern", Distance="rdist.earth", Dist.args=list(miles=FALSE), 
                           theta=phiZeta, smoothness=nuZeta, onlyUpper=TRUE) * sigmaZeta^2
-  SigmaDtoP = pointArealZetaCov(params, xd, csz, nDown=9, nStrike=12)
+  SigmaDtoP = pointArealZetaCov(params, xd, fault, nDown=9, nStrike=12)
   SigmaPtoD = t(SigmaDtoP)
   Sigma = cbind(rbind(SigmaD, SigmaPtoD), rbind(SigmaDtoP, SigmaCSZ))
   SigmaL = t(chol(Sigma))
   
   # generate predictive simulations
   zSims = matrix(rnorm(nsim*(nrow(xp)+nrow(xd))), nrow=nrow(xp)+nrow(xd), ncol=nsim)
-  logZetaSims = SigmaL %*% zSims + muZeta # add muZeta to each zero mean simulation
+  logZetaSims = sweep(SigmaL %*% zSims, 1, muVec, "+") # add muZeta (vector) to each zero mean simulation
   zetaSims = exp(logZetaSims)
-  tvec = taper(c(fault$depth, slipDatCSZ$Depth), lambda = lambda)
+  tvec = taper(c(gpsDat$Depth, fault$depth), lambda = lambda)
   slipSims = sweep(zetaSims, 1, tvec, FUN="*")
   
   # seperate areal average sims from GPS point location sims

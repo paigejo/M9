@@ -128,10 +128,13 @@ getMomentFromAvgSlip = function(slip=3, rigidity=4*10^10, lambda=NULL) {
   return(c(taper=magTaper, noTaper=magNoTaper))
 }
 
-getMomentFromSlip = function(slips, rigidity=4*10^10) {
+getMomentFromSlip = function(slips, rigidity=4*10^10, doTaper=FALSE, lambda=1, depths=csz$depth) {
   # get fault total area
   areas = csz$length*csz$width
   totArea = sum(areas)
+  
+  if(doTaper)
+    slips = slips*taper(depths, lambda)
   
   Mo = sum(slips*rigidity*areas)
   

@@ -1954,3 +1954,89 @@ system.time(test <- fitModelIterative(maxIter=2, niterMCMC=250)) #params fit max
 save(testInputs, file="testInputs.RData")
 load("testInputs.RData")
 parFit = doFixedFit(testInputs[[1]], testInputs[[2]], testInputs[[3]], testInputs[[4]], testInputs[[5]], testInputs[[6]])
+
+# check results of iterative model fit:
+out = load("fullIterFit.RData")
+muMatCSZ = state$muMatCSZ
+muMatGPS = state$muMatGPS
+parMat = state$parMat
+
+# plot both pointwise mean slips and block averages over CSZ geometry
+for(i in 1:ncol(muMatGPS)) {
+  meanVec = muMatGPS[,i]
+  sigmaZeta = parMat[3,i]
+  lambda = parMat[1,i]
+  untaperedMeanSlip = exp(meanVec + sigmaZeta^2/2)
+  taperedMeanSlip = taper(slipDatCSZ$Depth, lambda)*untaperedMeanSlip
+  quilt.plot(slipDatCSZ$lon, slipDatCSZ$lat, taperedMeanSlip, main=paste0("Mean slip at iteration ", i), 
+             zlim=c(0,35))
+  map("world", "Canada", add=TRUE, lwd=1.5)
+  US(add=TRUE, lwd=1.5)
+  plotFault(csz, plotData = FALSE, new=FALSE)
+}
+for(i in 1:ncol(muMatCSZ)) {
+  meanVec = muMatCSZ[,i]
+  sigmaZeta = parMat[3,i]
+  lambda = parMat[1,i]
+  untaperedMeanSlip = exp(meanVec + sigmaZeta^2/2)
+  taperedMeanSlip = taper(csz$depth, lambda)*untaperedMeanSlip
+  plotFault(csz, taperedMeanSlip, main=paste0("Mean slip at iteration ", i), varRange=c(0, 30))
+  map("world", "Canada", add=TRUE, lwd=1.5)
+  US(add=TRUE, lwd=1.5)
+}
+
+# plot 95th percentiles of slip over both pointwise and block CSZ geometry
+for(i in 1:ncol(muMatGPS)) {
+  meanVec = muMatGPS[,i]
+  sigmaZeta = parMat[3,i]
+  lambda = parMat[1,i]
+  untaperedHiSlip = exp(meanVec + qnorm(.95)*sigmaZeta)
+  taperedHiSlip = taper(slipDatCSZ$Depth, lambda)*untaperedHiSlip
+  quilt.plot(slipDatCSZ$lon, slipDatCSZ$lat, taperedHiSlip, main=paste0("Slip 95th percentile at iteration ", i), 
+             zlim=c(0,80))
+  map("world", "Canada", add=TRUE, lwd=1.5)
+  US(add=TRUE, lwd=1.5)
+  plotFault(csz, plotData = FALSE, new=FALSE)
+}
+for(i in 1:ncol(muMatCSZ)) {
+  meanVec = muMatCSZ[,i]
+  sigmaZeta = parMat[3,i]
+  lambda = parMat[1,i]
+  untaperedHiSlip = exp(meanVec + qnorm(.95)*sigmaZeta)
+  taperedHiSlip = taper(csz$depth, lambda)*untaperedHiSlip
+  plotFault(csz, taperedHiSlip, main=paste0("Slip 95th percentile at iteration ", i), varRange=c(0,80))
+  map("world", "Canada", add=TRUE, lwd=1.5)
+  US(add=TRUE, lwd=1.5)
+}
+
+# get magnitudes of the mean and 95th percentile slips for each iteration
+meanMags = c()
+hiMags = c()
+for(i in 1:ncol(muMatCSZ)) {
+  meanVec = muMatCSZ[,i]
+  sigmaZeta = parMat[3,i]
+  lambda = parMat[1,i]
+  untaperedMeanSlip = exp(meanVec + sigmaZeta^2/2)
+  taperedMeanSlip = taper(csz$depth, lambda)*untaperedMeanSlip
+  untaperedHiSlip = exp(meanVec + qnorm(.95)*sigmaZeta)
+  taperedHiSlip = taper(csz$depth, lambda)*untaperedHiSlip
+  meanMags[i] = getMomentFromSlip(taperedMeanSlip)
+  hiMags[i] = getMomentFromSlip(taperedHiSlip)
+}
+print(cbind(meanMags, hiMags))
+
+# explore likelihood of the fit model through the iterations:
+print(tail(state$optimTables[[1]][,4:6]))
+for(i in 1:length(state$optimTables)) {
+  print(tail(state$optimTables[[i]][,3:5]))
+}
+state$logLiks
+# NOTE: the log likelihoods seem to reach a minimum for some reason
+parMat = state$parMat
+rownames(parMat) = c("lambda", "muZeta", "sigmaZeta", "lambda0", "muXi")
+parMat
+# parameters seem to converge (with the exception of muXi, 
+# since the mean vector is changing).  sigmaZeta decreases monotonically (?), 
+# as expected
+
+
