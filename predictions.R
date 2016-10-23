@@ -798,10 +798,11 @@ genFullPredsMarginal = function(params, nsim=1000) {
 # function for computing predictive distribution given subsidence data.  Note that 
 # the subsidence data should only be the data from one earthquake.  The returned 
 # values relating to beta correspond to log zeta.  For instance, betaEsts is the 
-# vector of estimates of log zeta for the given earthquake.
-# NOTE: this function should only be called on data for a single fixed earthquake.
+# vector of estimates of log zeta for the given earthquake.  If prior=TRUE, then 
+# Goldfinger 2012 data is used to create a prior for earthquake magnitude.
+# NOTE: this function should only be called on data for a single fixed earthquake.  
 predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, niter=500, estVarMat=TRUE, 
-                                G=NULL) {
+                                G=NULL, prior=FALSE) {
   # first rows correspond to GPS data means, last rows correspond to csz 
   # grid cell means
   if(length(muVec) == 1)
@@ -827,7 +828,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
     ny=  900
     lonGrid = seq(lonRange[1], lonRange[2], l=nx)
     latGrid = seq(latRange[1], latRange[2], l=ny)
-    G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=lambda)
+    G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=lambda0)
   }
   
   # get taper values
@@ -870,10 +871,41 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
   options(mc.cores = numCores)
   
   # fit the regression model with Stan
-  predResults <- stan(file = "predsGivenSub.stan", iter=niter, 
-                      data=list(n=n, pAreal=pAreal, pPoint=pPoint, X=X, y=y, 
-                                sigmaY=sigmaY, priorMu=priorMu, priorSigmaL=priorSigmaL))
-  
+  if(!prior) {
+    # don't use a prior on the EQ magnitude
+    areas = fault$length * fault$width
+    mu = 4e10 # rigidty (value as assumed by Randy)
+    
+    predResults <- stan(file = "predsGivenSub.stan", iter=niter, 
+                        data=list(n=n, pAreal=pAreal, pPoint=pPoint, X=X, y=y, 
+                                  sigmaY=sigmaY, priorMu=priorMu, priorSigmaL=priorSigmaL, 
+                                  tvec=tvec, areas=areas, rigidity=mu), 
+                        pars=c("alpha"), include=FALSE)
+  }
+  else {
+    ## use prior on EQ magnitude from Goldfinger 2012 data
+    # read in Goldfinger data
+    goldfinger = read.csv("goldfinger2012Table8.csv", header=TRUE)
+    dr1Events = c(1:10, 12:17, 19:20, 22, 24, 28:29)
+    dr1Events = 1:31 # only keep events after and including T13
+    goldfinger = goldfinger[dr1Events,]
+    M0 = goldfinger$seismicMoment
+    
+    # convert from dyne cm to N m
+    M0 = M0 * 10^(-7)
+    
+    # get exponential rate parameter for fault grid cells
+    # NOTE: this is before tapering, since zeta itself is not tapered
+    areas = fault$length * fault$width
+    mu = 4e10 # rigidty (value as assumed by Randy)
+    tau = 1/mean(M0, na.rm=TRUE)
+    
+    predResults <- stan(file = "predsGivenSubExp.stan", iter=niter, 
+                        data=list(n=n, pAreal=pAreal, pPoint=pPoint, X=X, y=y, 
+                                  sigmaY=sigmaY, priorMu=priorMu, priorSigmaL=priorSigmaL, 
+                                  tvec=tvec, areas=areas, rigidity=mu, tau=tau), 
+                        pars=c("alpha"), include=FALSE)
+  }
 #   # show results
 #   print(predResults, digits = 1)
   
@@ -882,8 +914,11 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
   betaTab = tab$beta
   zetaTab = tab$zeta
   logZetaPointTab = tab$logZetaPoint
-  zetaPointTab = tab$zetaPoint
+  zetaPointTab = exp(logZetaPointTab)
+  M0Tab = tab$seismicMoment
+  MwTab = tab$Mw
   
+  # compute means, standard deviations, and middle 95% confidence intervals for relevant values
   betaEsts = colMeans(betaTab)
   betaSD = apply(betaTab, 2, sd)
   beta025 = apply(betaTab, 2, quantile, probs=0.025)
@@ -900,15 +935,24 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
   zetaPointSD = apply(zetaPointTab, 2, sd)
   zetaPoint025 = apply(zetaPointTab, 2, quantile, probs=0.025)
   zetaPoint975 = apply(zetaPointTab, 2, quantile, probs=0.975)
+  M0Est = mean(M0Tab)
+  M0SD = sd(M0Tab)
+  M0975 = quantile(probs=.975, M0Tab)
+  M0025 = quantile(probs=.025, M0Tab)
+  MwEst = mean(MwTab)
+  MwSD = sd(MwTab)
+  Mw975 = quantile(probs=.975, MwTab)
+  Mw025 = quantile(probs=.025, MwTab)
   
+  # estimate covariance matrix of params using emprical estimate from MCMC samples if necessary
   if(!estVarMat)
     return(list(predResults, 
                 betaEsts, betaSD, beta025, beta975, 
                 zetaEsts, zetaSD, zeta025, zeta975, 
                 logZetaPointEsts, logZetaPointSD, logZetaPoint025, logZetaPoint975, 
-                zetaPointEsts, zetaPointSD, zetaPoint025, zetaPoint975))
+                zetaPointEsts, zetaPointSD, zetaPoint025, zetaPoint975, 
+                M0Est, M0SD, M0975, M0025, MwEst, MwSD, Mw975, Mw025))
   else {
-    # compute covariance matrix of estimates using emprical estimate from MCMC samples
     betaTabCntr = sweep(betaTab, 2, betaEsts, "-")
     zetaTabCntr = sweep(zetaTab, 2, zetaEsts, "-")
     logZetaPointTabCntr = sweep(logZetaPointTab, 2, logZetaPointEsts, "-")
@@ -923,13 +967,141 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
                 logZetaPointEsts=logZetaPointEsts, logZetaPointSD=logZetaPointSD, logZetaPoint025=logZetaPoint025, logZetaPoint975=logZetaPoint975,
                 zetaPointEsts=zetaPointEsts, zetaPointSD=zetaPointSD, zetaPoint025=zetaPoint025, zetaPoint975=zetaPoint975,
                 betaVarMat=betaVarMat, zetaVarMat=zetaVarMat, 
-                logZetaPointVarMat=logZetaPointVarMat, zetaPointVarMat=zetaPointVarMat))
+                logZetaPointVarMat=logZetaPointVarMat, zetaPointVarMat=zetaPointVarMat, 
+                M0Est, M0SD, M0975, M0025, MwEst, MwSD, Mw975, Mw025))
   }
 }
 
 # this function updates the estimate of the mean vector of log zeta by weighting the 
 # estimates of each earthquake by their variances.
-updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ) {
+updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, G=NULL) {
+  # get fit MLEs
+  lambda = params[1]
+  muZeta = params[2]
+  sigmaZeta = params[3]
+  lambda0 = params[4]
+  muXi = params[5]
+  
+  if(length(muVec) == 1)
+    muVec = rep(muVec, nrow(gpsDat) + nrow(fault))
+  
+  # precompute G if necessary
+  if(is.null(G)) {
+    nx = 300
+    ny=  900
+    lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+    latGrid = seq(latRange[1], latRange[2], l=ny)
+    G = okadaAll(fault, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=lambda0)
+  }
+  
+  # Only use events that have at least 5 observations (leaves out T12, T11, and T9a)
+  minObs = 5
+  numObs = table(dr1$event)
+  threshUniqueEvents = uniqueEvents[numObs >= minObs]
+  
+  sampleSize = length(threshUniqueEvents)+1
+  ## for each event, get estimates for mean of log zeta and covariance matrices
+  ## (for areal averages and point estimates over GPS data support)
+  muMat = matrix(nrow=nrow(fault), ncol=sampleSize)
+  sdMat = matrix(nrow=nrow(fault), ncol=sampleSize)
+  muMatPoint = matrix(nrow=nrow(gpsDat), ncol=sampleSize)
+  sdMatPoint = matrix(nrow=nrow(gpsDat), ncol=sampleSize)
+  Sigmas = list()
+  SigmasPoint = list()
+  W = matrix(nrow=nrow(fault), ncol=sampleSize)
+  WPoint = matrix(nrow=nrow(gpsDat), ncol=sampleSize)
+  allStanResults = list()
+  
+  # first get estimates of log zeta from subsidence data attributed to each event
+  for(e in 1:length(threshUniqueEvents)) {
+    print(paste0("estimating log zeta for event ", threshUniqueEvents[e]))
+    
+    # all get event MCMC data
+    eventInds = events == threshUniqueEvents[e]
+    subDat = dr1[eventInds,]
+    thisG = G[eventInds,]
+    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, subDat=subDat, niter=niter, G=thisG)
+    # areal values
+    muMat[,e] = eventPreds$betaEsts
+    sdMat[,e] = eventPreds$betaSD
+    Sigmas[[e]] = eventPreds$betaVarMat
+    W[,e] = (eventPreds$betaSD)^(-1)
+    # pointwise values
+    muMatPoint[,e] = eventPreds$logZetaPointEsts
+    sdMatPoint[,e] = eventPreds$logZetaPointSD
+    SigmasPoint[[e]] = eventPreds$logZetaPointVarMat
+    WPoint[,e] = (eventPreds$logZetaPointSD)^(-1)
+    # full Stan MCMC dataset
+    allStanResults[[e]] = eventPreds$predResults
+  }
+  
+  # now get predictions for log zeta given GPS data
+  print("estimating log zeta for GPS data")
+  eventPreds = predsGivenGPSFull(params, nsim=2, muVec=muVec)
+  # areal estimates
+  muMat[,e+1] = eventPreds$muc
+  sdMat[,e+1] = diag(eventPreds$Sigmac)
+  Sigmas[[e+1]] = eventPreds$Sigmac
+  W[,e+1] = diag(eventPreds$Sigmac)^(-1)
+  # pointwise estimates
+  muMatPoint[,e+1] = eventPreds$mucGPS
+  sdMatPoint[,e+1] = diag(eventPreds$SigmacGPS)
+  SigmasPoint[[e+1]] = eventPreds$SigmacGPS
+  WPoint[,e+1] = diag(eventPreds$SigmacGPS)^(-1)
+  
+  # convert W matrix from related weights to absolute weights (summing to 1)
+  W = sweep(W, 1, rowSums(W), "/")
+  WPoint = sweep(WPoint, 1, rowSums(WPoint), "/")
+  
+  ## calculate new mean estimate and its variance matrix
+  newMu = rowSums(W*muMat)
+  varMat = matrix(0, nrow=nrow(fault), ncol=nrow(fault))
+  newMuPoint = rowSums(WPoint*muMatPoint)
+  varMatPoint = matrix(0, nrow=nrow(gpsDat), ncol=nrow(gpsDat))
+  for(k in 1:sampleSize) {
+    # areal values
+    thisVar = Sigmas[[k]]
+    thisWeights = W[,k]
+    thisVar = sweep(sweep(thisVar, 1, thisWeights, "*"), 2, thisWeights, "*")
+    varMat = varMat + thisVar
+    
+    #pointwise values
+    thisVarPoint = SigmasPoint[[k]]
+    thisWeightsPoint = WPoint[,k]
+    thisVarPoint = sweep(sweep(thisVarPoint, 1, thisWeightsPoint, "*"), 2, thisWeightsPoint, "*")
+    varMatPoint = varMatPoint + thisVarPoint
+  }
+  
+  ## calculate new mean estimate based only on subsidence and its variance matrix
+  WSub = W[,1:(sampleSize-1)]
+  WSub = sweep(WSub, 1, rowSums(WSub), "/")
+  WPointSub = WPoint[,1:(sampleSize-1)]
+  WPointSub = sweep(WPointSub, 1, rowSums(WPointSub), "/")
+  newMuSub = rowSums(WSub*muMat[,1:(sampleSize-1)])
+  varMatSub = matrix(0, nrow=nrow(fault), ncol=nrow(fault))
+  newMuSubPoint = rowSums(WPointSub*muMatPoint[,1:(sampleSize-1)])
+  varMatSubPoint = matrix(0, nrow=nrow(gpsDat), ncol=nrow(gpsDat))
+  for(k in 1:(sampleSize-1)) {
+    #areal values
+    thisVar = Sigmas[[k]]
+    thisWeights = WSub[,k]
+    thisVar = sweep(sweep(thisVar, 1, thisWeights, "*"), 2, thisWeights, "*")
+    varMatSub = varMatSub + thisVar
+    # pointwise values
+    thisVarPoint = SigmasPoint[[k]]
+    thisWeightsPoint = WPointSub[,k]
+    thisVarPoint = sweep(sweep(thisVarPoint, 1, thisWeightsPoint, "*"), 2, thisWeightsPoint, "*")
+    varMatSubPoint = varMatSubPoint + thisVarPoint
+  }
+  
+  return(list(newMu=newMu, varMat=varMat, muMat=muMat, Sigmas=Sigmas, 
+              newMuSub=newMuSub, newMuPoint=newMuPoint, 
+              varMatPoint=varMatPoint, muMatPoint=muMatPoint, SigmasPoint=SigmasPoint, 
+              newMuSubPoint=newMuSubPoint, allStanResults=allStanResults))
+}
+
+updateMuGivenStan = function(params, stanResults, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, 
+                             G=NULL) {
   # get fit MLEs
   lambda = params[1]
   muZeta = params[2]
@@ -941,11 +1113,13 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipD
     muVec = rep(muVec, nrow(gpsDat) + nrow(fault))
   
   # precompute G
-  nx = 300
-  ny=  900
-  lonGrid = seq(lonRange[1], lonRange[2], l=nx)
-  latGrid = seq(latRange[1], latRange[2], l=ny)
-  G = okadaAll(fault, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=lambda)
+  if(is.null(G)) {
+    nx = 300
+    ny=  900
+    lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+    latGrid = seq(latRange[1], latRange[2], l=ny)
+    G = okadaAll(fault, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=lambda0)
+  }
   
   # Only use events that have at least 5 observations (leaves out T12, T11, and T9a)
   minObs = 5

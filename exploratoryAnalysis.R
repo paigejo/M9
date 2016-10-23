@@ -1956,7 +1956,7 @@ load("testInputs.RData")
 parFit = doFixedFit(testInputs[[1]], testInputs[[2]], testInputs[[3]], testInputs[[4]], testInputs[[5]], testInputs[[6]])
 
 # check results of iterative model fit:
-out = load("fullIterFit.RData")
+out = load("fullIterFit2.RData")
 muMatCSZ = state$muMatCSZ
 muMatGPS = state$muMatGPS
 parMat = state$parMat
@@ -1993,7 +1993,7 @@ for(i in 1:ncol(muMatGPS)) {
   untaperedHiSlip = exp(meanVec + qnorm(.95)*sigmaZeta)
   taperedHiSlip = taper(slipDatCSZ$Depth, lambda)*untaperedHiSlip
   quilt.plot(slipDatCSZ$lon, slipDatCSZ$lat, taperedHiSlip, main=paste0("Slip 95th percentile at iteration ", i), 
-             zlim=c(0,80))
+             zlim=c(0,100))
   map("world", "Canada", add=TRUE, lwd=1.5)
   US(add=TRUE, lwd=1.5)
   plotFault(csz, plotData = FALSE, new=FALSE)
@@ -2004,7 +2004,8 @@ for(i in 1:ncol(muMatCSZ)) {
   lambda = parMat[1,i]
   untaperedHiSlip = exp(meanVec + qnorm(.95)*sigmaZeta)
   taperedHiSlip = taper(csz$depth, lambda)*untaperedHiSlip
-  plotFault(csz, taperedHiSlip, main=paste0("Slip 95th percentile at iteration ", i), varRange=c(0,80))
+  plotFault(csz, taperedHiSlip, main=paste0("Slip 95th percentile at iteration ", i), 
+            varRange=c(0,100))
   map("world", "Canada", add=TRUE, lwd=1.5)
   US(add=TRUE, lwd=1.5)
 }

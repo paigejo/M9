@@ -17,6 +17,9 @@ data {
   // In other words, these are the parameters for the marginal distribution of log(zeta)
   vector[pPoint+pAreal] priorMu;     // mean vector
   matrix[pPoint+pAreal,pPoint+pAreal] priorSigmaL;     // covariance matrix Cholesky decomposition
+  
+  // Use an exponential prior on seismic moment based on Goldfiner 2012 data
+  real<lower=0> tau; // exponential rate for seismic moment
 }
 transformed data {
   int<lower=0> pTot;
@@ -51,9 +54,17 @@ transformed parameters {
   Mw = (log10(seismicMoment) - 9.05)/1.5;
 }
 model {
-  // vectorized prior
+  // vectorized prior on log-slips
   alpha ~ normal(0, 1);
   // implies beta ~ multi_normal_cholesky(priorMu, priorSigmaL)
+  
+  // prior on seismic moment based on Goldfinger 2012 data
+  seismicMoment ~ exponential(tau);
+  
+  // must increment log probability since zeta is non-linear transform of log zeta, and 
+  // seismicMoment is a linear transform of zeta NOTE:  Is this increment correct??
+  // for (i in 1:pAreal)
+  //  increment_log_prob(-log(fabs(zeta[i])));
   
   // data model (likelihood)
   y ~ normal(X * zeta, sigmaY);
