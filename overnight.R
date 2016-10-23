@@ -61,4 +61,4 @@ save(testResults, file="testResults.RData")
 testResults <- fitModelIterative(maxIter=20, niterMCMC=500, saveFile="fullIterFit.RData") #params fit maxIter times, mean fit maxIter-1 times
 testResults <- fitModelIterative(maxIter=20, niterMCMC=500, saveFile="fullIterFit2.RData", loadDat="fullIterFit2.RData")
 
-
+testResults <- fitModelIterative(maxIter=20, niterMCMC=500, saveFile="fullIterFit.RData", usePrior=TRUE) #params fit maxIter times, mean fit maxIter-1 times

@@ -999,7 +999,7 @@ subLikGivenAll = function(params, SigmaPtoD, SigmaD, GPred=NULL, GFit=NULL, gpsD
 # is the niter input to updateMu()).
 fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDat=slipDatCSZ, 
                              corMatGPS=NULL, muVec=NULL, maxIter=5, fault=csz, niterMCMC=250, 
-                             loadDat=NULL, saveFile="iterFitProgress.RData") {
+                             loadDat=NULL, saveFile="iterFitProgress.RData", usePrior=FALSE) {
   funIns = list(initParams=initParams, nsim=nsim, useMVNApprox=useMVNApprox, gpsDat=gpsDat, 
                 corMatGPS=corMatGPS, muVec=muVec, maxIter=maxIter, fault=fault, niterMCMC=niterMCMC)
   
@@ -1107,7 +1107,7 @@ fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDa
     }
     print(paste0("fitting model mean, current iteration is: ", currIter))
     
-    newMu = updateMu(params, muVec=muVec, fault=csz, niter=niterMCMC, G=G)
+    newMu = updateMu(params, muVec=muVec, fault=csz, niter=niterMCMC, G=G, usePrior=usePrior)
 #     list(newMu=newMu, varMat=varMat, muMat=muMat, Sigmas=Sigmas, 
 #          newMuSub=newMuSub, newMuPoint=newMuPoint, 
 #          varMatPoint=varMatPoint, muMatPoint=muMatPoint, SigmasPoint=SigmasPoint, 

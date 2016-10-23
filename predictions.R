@@ -974,7 +974,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
 
 # this function updates the estimate of the mean vector of log zeta by weighting the 
 # estimates of each earthquake by their variances.
-updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, G=NULL) {
+updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, G=NULL, usePrior=FALSE) {
   # get fit MLEs
   lambda = params[1]
   muZeta = params[2]
@@ -1020,7 +1020,8 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipD
     eventInds = events == threshUniqueEvents[e]
     subDat = dr1[eventInds,]
     thisG = G[eventInds,]
-    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, subDat=subDat, niter=niter, G=thisG)
+    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, subDat=subDat, niter=niter, 
+                                      G=thisG, prior=usePrior)
     # areal values
     muMat[,e] = eventPreds$betaEsts
     sdMat[,e] = eventPreds$betaSD
