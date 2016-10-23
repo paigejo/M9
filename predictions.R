@@ -974,7 +974,8 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
 
 # this function updates the estimate of the mean vector of log zeta by weighting the 
 # estimates of each earthquake by their variances.
-updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, G=NULL, usePrior=FALSE) {
+updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, G=NULL, 
+                    usePrior=FALSE, subDat=dr1) {
   # get fit MLEs
   lambda = params[1]
   muZeta = params[2]
@@ -991,12 +992,12 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipD
     ny=  900
     lonGrid = seq(lonRange[1], lonRange[2], l=nx)
     latGrid = seq(latRange[1], latRange[2], l=ny)
-    G = okadaAll(fault, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=lambda0)
+    G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=lambda0)
   }
   
   # Only use events that have at least 5 observations (leaves out T12, T11, and T9a)
   minObs = 5
-  numObs = table(dr1$event)
+  numObs = table(subDat$event)
   threshUniqueEvents = uniqueEvents[numObs >= minObs]
   
   sampleSize = length(threshUniqueEvents)+1
@@ -1018,9 +1019,9 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipD
     
     # all get event MCMC data
     eventInds = events == threshUniqueEvents[e]
-    subDat = dr1[eventInds,]
+    thisSubDat = subDat[eventInds,]
     thisG = G[eventInds,]
-    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, subDat=subDat, niter=niter, 
+    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, subDat=thisSubDat, niter=niter, 
                                       G=thisG, prior=usePrior)
     # areal values
     muMat[,e] = eventPreds$betaEsts
@@ -1102,7 +1103,7 @@ updateMu = function(params, muVec=params[2], fault=csz, niter=1000, gpsDat=slipD
 }
 
 updateMuGivenStan = function(params, stanResults, muVec=params[2], fault=csz, niter=1000, gpsDat=slipDatCSZ, 
-                             G=NULL) {
+                             G=NULL, subDat=dr1) {
   # get fit MLEs
   lambda = params[1]
   muZeta = params[2]
@@ -1119,12 +1120,12 @@ updateMuGivenStan = function(params, stanResults, muVec=params[2], fault=csz, ni
     ny=  900
     lonGrid = seq(lonRange[1], lonRange[2], l=nx)
     latGrid = seq(latRange[1], latRange[2], l=ny)
-    G = okadaAll(fault, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=lambda0)
+    G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=lambda0)
   }
   
   # Only use events that have at least 5 observations (leaves out T12, T11, and T9a)
   minObs = 5
-  numObs = table(dr1$event)
+  numObs = table(subDat$event)
   threshUniqueEvents = uniqueEvents[numObs >= minObs]
   
   sampleSize = length(threshUniqueEvents)+1
@@ -1146,9 +1147,9 @@ updateMuGivenStan = function(params, stanResults, muVec=params[2], fault=csz, ni
     
     # all get event MCMC data
     eventInds = events == threshUniqueEvents[e]
-    subDat = dr1[eventInds,]
+    thisSubDat = subDat[eventInds,]
     thisG = G[eventInds,]
-    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, subDat=subDat, niter=niter, G=thisG)
+    eventPreds = predsGivenSubsidence(params, muVec=muVec, fault=fault, thisSubDat=thisSubDat, niter=niter, G=thisG)
     # areal values
     muMat[,e] = eventPreds$betaEsts
     sdMat[,e] = eventPreds$betaSD

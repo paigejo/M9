@@ -440,7 +440,7 @@ subsidenceLnLikMod = function(G, cszDepths, SigmaZetaL, lambda, muZeta, nsim=300
 #       It may help to do block optimization, fixing lambda0 for a while before changing it.
 #       Alternatively, we could assume lambda0=0.25 as is often done.
 doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slipDatCSZ, 
-                      corMatGPS=NULL, muVec=NULL, G=NULL) {
+                      corMatGPS=NULL, muVec=NULL, G=NULL, subDat=dr1) {
   ##### Set up initial parameter guesses for the MLE optimization if necessary
   if(is.null(initParams)) {
     lambdaInit=2
@@ -493,7 +493,7 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
     ny=  900
     lonGrid = seq(lonRange[1], lonRange[2], l=nx)
     latGrid = seq(latRange[1], latRange[2], l=ny)
-    G = okadaAll(fault, lonGrid, latGrid, cbind(gpsDat$Lon, gpsDat$Lat), slip=1, poisson=0.25)
+    G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=0.25)
   }
   
   ##### calculate depths of the centers of the CSZ subfaults
@@ -505,7 +505,7 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
   opt = optim(initParams, fixedDataLogLik, control=controls, hessian=TRUE, 
               cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
               phiZeta=phiZeta, gpsDat=gpsDat, nsim=nsim, 
-              useMVNApprox=useMVNApprox, muZeta=muVec, G=G)
+              useMVNApprox=useMVNApprox, muZeta=muVec, G=G, subDat=subDat)
   
   # test = fullDataLogLik(initParams, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
   # phiZeta=phiZeta, slipDatCSZ=slipDatCSZ)
@@ -562,7 +562,8 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
 # params[2]: sigmaZeta
 # NOTE: muXi was provided but there is an easy conditional estimate of this
 fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gpsDat=slipDatCSZ, 
-                           subDat=dr1, nsim=500, useMVNApprox=FALSE, verbose=TRUE, muZeta=NULL, G=NULL) {
+                           subDat=dr1, nsim=500, useMVNApprox=FALSE, verbose=TRUE, muZeta=NULL, 
+                           G=NULL) {
   ##### get parameters
   if(is.null(muZeta)) {
     lambda = params[1]
@@ -999,7 +1000,8 @@ subLikGivenAll = function(params, SigmaPtoD, SigmaD, GPred=NULL, GFit=NULL, gpsD
 # is the niter input to updateMu()).
 fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDat=slipDatCSZ, 
                              corMatGPS=NULL, muVec=NULL, maxIter=5, fault=csz, niterMCMC=250, 
-                             loadDat=NULL, saveFile="iterFitProgress.RData", usePrior=FALSE) {
+                             loadDat=NULL, saveFile="iterFitProgress.RData", usePrior=FALSE, 
+                             subDat=dr1) {
   funIns = list(initParams=initParams, nsim=nsim, useMVNApprox=useMVNApprox, gpsDat=gpsDat, 
                 corMatGPS=corMatGPS, muVec=muVec, maxIter=maxIter, fault=fault, niterMCMC=niterMCMC)
   
@@ -1033,7 +1035,7 @@ fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDa
   ny=  900
   lonGrid = seq(lonRange[1], lonRange[2], l=nx)
   latGrid = seq(latRange[1], latRange[2], l=ny)
-  G = okadaAll(fault, lonGrid, latGrid, cbind(gpsDat$Lon, gpsDat$Lat), slip=1, poisson=0.25)
+  G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=0.25)
   
   #called maxIter times
   fitModelParams = function(params, muVec=NULL, currIter=1) {
@@ -1059,7 +1061,7 @@ fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDa
     print(paste0("fitting model parameters, current iteration is: ", currIter))
     
     # fit the parameters
-    parFit = doFixedFit(params, nsim, useMVNApprox, gpsDat, corMatGPS, muVec, G=G)
+    parFit = doFixedFit(params, nsim, useMVNApprox, gpsDat, corMatGPS, muVec, G=G, subDat=subDat)
 #     list(MLEs=c(opt$par, 0.25, muXiMLE), lambdaMLE=lambdaMLE, muZetaMLE=muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambda0MLE=0.25, 
 #          muXiMLE=muXiMLE, logLikMLE=logLikMLE, hess=hess, optimTable=optimTable)
     
@@ -1107,7 +1109,7 @@ fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDa
     }
     print(paste0("fitting model mean, current iteration is: ", currIter))
     
-    newMu = updateMu(params, muVec=muVec, fault=csz, niter=niterMCMC, G=G, usePrior=usePrior)
+    newMu = updateMu(params, muVec=muVec, fault=csz, niter=niterMCMC, G=G, usePrior=usePrior, subDat=subDat)
 #     list(newMu=newMu, varMat=varMat, muMat=muMat, Sigmas=Sigmas, 
 #          newMuSub=newMuSub, newMuPoint=newMuPoint, 
 #          varMatPoint=varMatPoint, muMatPoint=muMatPoint, SigmasPoint=SigmasPoint, 
