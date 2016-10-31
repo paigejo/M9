@@ -329,12 +329,12 @@ getGPSSubfaultDepths = function() {
 # muZeta: mean of log zeta field areal average values.  If vector must be 
 #         same length as nrow(fault)
 subsidenceLnLikMod = function(G, cszDepths, SigmaZetaL, lambda, muZeta, nsim=3000, 
-                              subDat=dr1) {
+                              subDat=dr1, tvec=taper(cszDepths, lambda=lambda)) {
   # m is number of csz subfaults
   m = nrow(SigmaZetaL)
   
   # get log taper values
-  logt = log(taper(cszDepths, lambda=lambda))
+  logt = log(tvec)
   
   # get updated mean vector of GP in exponent of Zeta
   meanZeta = logt + muZeta
@@ -440,7 +440,7 @@ subsidenceLnLikMod = function(G, cszDepths, SigmaZetaL, lambda, muZeta, nsim=300
 #       It may help to do block optimization, fixing lambda0 for a while before changing it.
 #       Alternatively, we could assume lambda0=0.25 as is often done.
 doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slipDatCSZ, 
-                      corMatGPS=NULL, muVec=NULL, G=NULL, subDat=dr1) {
+                      corMatGPS=NULL, muVec=NULL, G=NULL, subDat=dr1, dStar=21000, normalizeTaper=TRUE) {
   ##### Set up initial parameter guesses for the MLE optimization if necessary
   if(is.null(initParams)) {
     lambdaInit=2
@@ -454,13 +454,7 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
     if(is.null(muVec))
       initParams = c(lambdaInit, muZetaInit, sigmaZetaInit)
     else
-      initParams = c(lambdaInit, sigmaZetaInit)
-  }
-  
-  # make sure correct parameter vector format is given if muZeta is a vector
-  if(!is.null(muVec)) {
-    if(length(initParams) > 2)
-      initParams = c(initParams[1], initParams[3]) # lambda and sigmaZeta
+      initParams = c(lambdaInit, NA, sigmaZetaInit)
   }
   
   phiZeta = 232.5722 # MLE based on fitGPSCovariance result
@@ -493,7 +487,7 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
     ny=  900
     lonGrid = seq(lonRange[1], lonRange[2], l=nx)
     latGrid = seq(latRange[1], latRange[2], l=ny)
-    G = okadaAll(fault, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=0.25)
+    G = okadaAll(csz, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=0.25)
   }
   
   ##### calculate depths of the centers of the CSZ subfaults
@@ -504,7 +498,7 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
   controls = list(fnscale = -1, reltol=10^-5)
   opt = optim(initParams, fixedDataLogLik, control=controls, hessian=TRUE, 
               cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
-              phiZeta=phiZeta, gpsDat=gpsDat, nsim=nsim, 
+              phiZeta=phiZeta, gpsDat=gpsDat, nsim=nsim, dStar=dStar, normalizeTaper=normalizeTaper, 
               useMVNApprox=useMVNApprox, muZeta=muVec, G=G, subDat=subDat)
   
   # test = fullDataLogLik(initParams, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
@@ -563,23 +557,42 @@ doFixedFit = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slip
 # NOTE: muXi was provided but there is an easy conditional estimate of this
 fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gpsDat=slipDatCSZ, 
                            subDat=dr1, nsim=500, useMVNApprox=FALSE, verbose=TRUE, muZeta=NULL, 
-                           G=NULL) {
+                           G=NULL, nKnots=5, normalizeTaper=TRUE, dStar=21000) {
   ##### get parameters
-  if(is.null(muZeta)) {
-    lambda = params[1]
-    muZeta = params[2]
-    sigmaZeta = params[3]
-    muZetaGPS = muZeta
-    muZetaCSZ = muZeta
-    vecMu=FALSE
+  if(length(params) <= 3) {
+    if(is.null(muZeta)) {
+      lambda = params[1]
+      muZeta = params[2]
+      sigmaZeta = params[3]
+      muZetaGPS = muZeta
+      muZetaCSZ = muZeta
+      vecMu=FALSE
+    }
+    else {
+      lambda = params[1]
+      sigmaZeta = params[2]
+      muZetaGPS = muZeta[1:nrow(gpsDat)]
+      muZetaCSZ = muZeta[(nrow(gpsDat)+1):length(muZeta)]
+      vecMu=TRUE
+    }
   }
-  else {
-    lambda = params[1]
-    sigmaZeta = params[2]
-    muZetaGPS = muZeta[1:nrow(gpsDat)]
-    muZetaCSZ = muZeta[(nrow(gpsDat)+1):length(muZeta)]
-    vecMu=TRUE
+  if(length(params) > 3) {
+    if(is.null(muZeta)) {
+      muZeta = params[1]
+      sigmaZeta = params[2]
+      splinePar = params[-c(1:2)]
+      tvec = getTaperSpline(splinePar, nKnots=nKnots, normalize=normalizeTaper, dStar=dStar)
+      lambda = 1 # lambda is only used for checking if lambda < 0
+      muZetaGPS = muZeta
+      muZetaCSZ = muZeta
+      vecMu=FALSE
+    }
+    else {
+      stop("Code not yet written for spline taper fit along with vector muZeta")
+    }
   }
+  else
+    tvec = taper(cszDepths, lambda=lambda)
   lambda0 = 0.25
   
   ##### compute unit slip Okada seadef if necessary
@@ -592,18 +605,28 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gp
   }
   
   ##### make sure params are in correct range and update optimTable
-  if(lambda < 0 || sigmaZeta < 0) {
-    if(vecMu)
-      newRow = rbind(c(params[1:2], -10000, -5000, -5000, NA))
-    else
-      newRow = rbind(c(params, -10000, -5000, -5000, NA))
+  if(!is.na(lambda) && (lambda < 0 || sigmaZeta < 0)) {
     if(!vecMu) {
-      colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
-                           "subLnLik", "GPSLnLik", "lnLikSE")
+      newRow = rbind(c(params, -10000, -5000, -5000, NA))
+      if(length(params) > 3) {
+        colnames(newRow) = c("muZeta", "sigmaZeta", paste0("beta", 1:(nKnots+1)), 
+                             "lnLik", "subLnLik", "GPSLnLik", "lnLikSE")
+      }
+      else {
+        colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
+                             "subLnLik", "GPSLnLik", "lnLikSE")
+      }
     }
     else {
-      colnames(newRow) = c("lambda", "sigmaZeta", "lnLik", 
-                           "subLnLik", "GPSLnLik", "lnLikSE")
+      newRow = rbind(c(params[1:2], splinePar, -10000, -5000, -5000, NA))
+      if(length(params) > 2) {
+        colnames(newRow) = c("sigmaZeta", paste0("beta", 1:(nKnots+1)), 
+                             "lnLik", "subLnLik", "GPSLnLik", "lnLikSE")
+      }
+      else {
+        colnames(newRow) = c("lambda", "sigmaZeta", "lnLik", 
+                             "subLnLik", "GPSLnLik", "lnLikSE")
+      }
     }
     if(verbose)
       print(newRow)
@@ -618,10 +641,12 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gp
   ##### Compute Likelihood of subsidence and GPS data
   # sub = subsidenceLnLik(G, cszDepths, SigmaZetaCSZL, lambda, muZeta, nsim=nsim)
   if(!useMVNApprox)
-    sub = subsidenceLnLikMod(G, cszDepths, SigmaZetaCSZL, lambda=0.25, muZetaCSZ, nsim=nsim)
+    sub = subsidenceLnLikMod(G, cszDepths, SigmaZetaCSZL, lambda=0.25, muZetaCSZ, nsim=nsim, 
+                             tvec=tvec)
   else {
     SigmaZeta = SigmaZetaCSZL %*% t(SigmaZetaCSZL)
-    sub = subsidenceLnLikMod2(muZetaCSZ, lambda, sigmaZeta, SigmaZeta, G, subDat=subDat)
+    sub = subsidenceLnLikMod2(muZetaCSZ, lambda, sigmaZeta, SigmaZeta, G, subDat=subDat, 
+                              tvec=tvec)
   }
     
   GPS = GPSLnLik(muZetaGPS, SigmaZetaGPS, gpsDat)
@@ -631,13 +656,25 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS, corMatCSZL, phiZeta, gp
   ##### update parameter optimization table
   if(!vecMu) {
     newRow = rbind(c(params, lnLik, sub[1], GPS, lnLikSE))
-    colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
-                         "subLnLik", "GPSLnLik", "lnLikSE")
+    if(length(params) > 3) {
+      colnames(newRow) = c("muZeta", "sigmaZeta", paste0("beta", 1:(nKnots+1)), 
+                           "lnLik", "subLnLik", "GPSLnLik", "lnLikSE")
+    }
+    else {
+      colnames(newRow) = c("lambda", "muZeta", "sigmaZeta", "lnLik", 
+                           "subLnLik", "GPSLnLik", "lnLikSE")
+    }
   }
   else {
-    newRow = rbind(c(params[1:2], lnLik, sub[1], GPS, lnLikSE))
-    colnames(newRow) = c("lambda", "sigmaZeta", "lnLik", 
-                         "subLnLik", "GPSLnLik", "lnLikSE")
+    newRow = rbind(c(params[1:2], splinePar, lnLik, sub[1], GPS, lnLikSE))
+    if(length(params) > 2) {
+      colnames(newRow) = c("sigmaZeta", paste0("beta", 1:(nKnots+1)), 
+                           "lnLik", "subLnLik", "GPSLnLik", "lnLikSE")
+    }
+    else {
+      colnames(newRow) = c("lambda", "sigmaZeta", "lnLik", 
+                           "subLnLik", "GPSLnLik", "lnLikSE")
+    }
   }
   if(verbose)
     print(newRow)
@@ -661,12 +698,12 @@ source("approxDistn.R")
 
 # Approximate the distribution of G %*% T %*% Zeta with a MVN to get likelihood
 # here muZeta can be either a constant or a vector of length ncol(G)
-subsidenceLnLikMod2 = function(muZeta, lambda, sigmaZeta, SigmaZeta, G, subDat=dr1) {
-  # get vector of taper values
-  tvec = taper(csz$depth, lambda = lambda)
+subsidenceLnLikMod2 = function(muZeta, lambda, sigmaZeta, SigmaZeta, G, subDat=dr1, 
+                               tvec=taper(csz$depth, lambda=lambda)) {
   
   # This is the key step: approximate G %*% T %*% Zeta with a MVN
-  mvnApprox = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaZeta, G, subDat=subDat)
+  mvnApprox = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaZeta, G, subDat=subDat, 
+                                   tvec=tvec)
   mu = mvnApprox$mu
   Sigma = mvnApprox$Sigma
   
@@ -1184,11 +1221,198 @@ fitModelIterative = function(initParams=NULL, nsim=500, useMVNApprox=TRUE, gpsDa
 }
 
 
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+# functions for fitting model assuming spline basis for lambda in latitude
 
+##### function for performing full MLE fit of model
+# if muVec not included, params are of form:
+# params[1]: lambda (NA, use spline basis instead)
+# params[2]: muZeta
+# params[3]: sigmaZeta
+# params[4]: lambda0 (0.25)
+# params[5]: muXi
+# params[6:(6+nKnots)]: lambda spline coefficient basis coefficients
+# otherwise, they are of form:
+# params[1]: lambda
+# params[2]: sigmaZeta
+# params[3]: lambda0
+# initParams is of the form: c(muZeta, sigmaZeta, splineParams)
+# NOTE: fixing params[6:(6+nKnots)] = lambda for one lambda corresponds to 
+#       the previous model, lambda is constant throughout space
+doFitSpline = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDat=slipDatCSZ, 
+                      corMatGPS=NULL, muVec=NULL, G=NULL, subDat=dr1, nKnots=4, normalizeTaper=TRUE, 
+                      dStar=21000) {
+  ##### Set up initial parameter guesses for the MLE optimization if necessary
+  if(is.null(initParams)) {
+    lambdaInit=2
+    muZetaInit = log(20)
+    # variance of a lognormal (x) is (exp(sigma^2) - 1) * exp(2mu + sigma^2)
+    # then sigma^2 = log(var(e^x)) - 2mu - log(e^(sigma^2) - 1)
+    # so sigma^2 \approx log(var(e^x)) - 2mu
+    # sigmaZetaInit = sqrt(log(var(dr1$subsidence)) - 2*muZetaInit)
+    sigmaZetaInit = 1
+    # muXiInit = log(2.25) # based on plots from exploratory analysis
+    initSplineParams = getInitialSplineEsts(muZetaInit, sigmaZetaInit, lambdaInit, nKnots=nKnots, 
+                                            normalizeTaper=normalizeTaper, dStar=dStar)
+    initParams = c(muZetaInit, sigmaZetaInit, initSplineParams)
+  }
+  
+  phiZeta = 232.5722 # MLE based on fitGPSCovariance result
+  nuZeta = 3/2 # we assume this is the Matern smoothness parameter
+  
+  ##### calculate correlation matrices for Zeta in km (for CSZ grid and the GPS data)
+  # NOTE: only the upper triangle is computed for faster computation.  This is 
+  #       sufficient for R's Cholesky decomposition
+  # since we only want the correlation matrix, set sigmaZeta to 1
+  #   coords = cbind(csz$longitude, csz$latitude)
+  #   corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta, 
+  #                              onlyUpper=TRUE, Distance="rdist.earth", 
+  #                              Dist.args=list(miles=FALSE), smoothness=nuZeta)
+  # tmpParams = rep(1, 5)
+  # corMatCSZ = arealZetaCov(tmpParams, csz, nDown1=9, nStrike1=12)
+  # load the precomputed correlation matrix
+  load("arealCSZCor.RData")
+  corMatCSZ = arealCSZCor
+  corMatCSZL = t(chol(corMatCSZ))
+  coords = cbind(gpsDat$lon, gpsDat$lat)
+  if(is.null(corMatGPS)) {
+    corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta, 
+                               onlyUpper=TRUE, smoothness=nuZeta, 
+                               Distance="rdist.earth", Dist.args=list(miles=FALSE))
+  }
+  
+  # get Okada linear transformation matrix
+  if(is.null(G)) {
+    nx = 300
+    ny=  900
+    lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+    latGrid = seq(latRange[1], latRange[2], l=ny)
+    G = okadaAll(csz, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=0.25)
+  }
+  
+  ##### calculate depths of the centers of the CSZ subfaults
+  cszDepths = getFaultCenters(csz)[,3]
+  
+  ##### Do optimization
+  optimTable <<- NULL # table to save likelihood optimization steps
+  controls = list(fnscale = -1, reltol=1e-6)
+  opt = optim(initParams, fixedDataLogLik, control=controls, hessian=TRUE, 
+              cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
+              phiZeta=phiZeta, gpsDat=gpsDat, nsim=nsim, nKnots=nKnots, 
+              useMVNApprox=useMVNApprox, muZeta=muVec, G=G, subDat=subDat, 
+              normalizeTaper=normalizeTaper, dStar=dStar)
+  
+  # test = fullDataLogLik(initParams, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, 
+  # phiZeta=phiZeta, slipDatCSZ=slipDatCSZ)
+  
+  # get results of optimization
+  if(is.null(muVec)) {
+    lambdaMLE = opt$par[1]
+    muZetaMLE = opt$par[2]
+    sigmaZetaMLE = opt$par[3]
+    muZetaGPS = muZetaMLE
+    muZetaCSZ = muZetaMLE
+  }
+  else {
+    lambdaMLE = opt$par[1]
+    sigmaZetaMLE = opt$par[2]
+    muZetaMLE=muVec
+    muZetaGPS = muVec[1:nrow(gpsDat)]
+    muZetaCSZ = muVec[(nrow(gpsDat)+1):length(muVec)]
+  }
+  if(length(opt$par) > 3) {
+    splinePar = opt$par[(length(opt$par)-(nKnots)):length(opt$par)]
+  }
+  logLikMLE = opt$value
+  hess = opt$hessian
+  
+  ##### get conditional MLE of muXi
+  # Calculate the standard error vector of xi. Derivation from week 08_30_17.Rmd presentation.  
+  # Transformation from additive error to  multiplicative lognormal model with asympototic 
+  # median and variance matching.
+  sigmaXi = sqrt(log(.5*(sqrt(4*gpsDat$slipErr^2/gpsDat$slip^2 + 1) + 1)))
+  
+  # estimate muXi MLE with inverse variance weighting
+  logX = log(gpsDat$slip)
+  ci = 1/sigmaXi^2
+  ci = ci/sum(ci)
+  muXiMLE = sum((logX-muZetaGPS)*ci)
+  
+  # params is in order: lambda, muZeta, sigmaZeta, lambda0, muXi, splineParams
+  if(is.null(muVec))
+    MLEs = c(NA, opt$par[1:2], 0.25, muXiMLE, opt$par[-c(1:2)])
+  else
+    MLEs = c(NA, NA, opt$par[1], 0.25, muXiMLE, opt$par[-1])
+  
+  # Return results
+  list(MLEs=MLEs, lambdaMLE=lambdaMLE, muZetaMLE=muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambda0MLE=NA, 
+       muXiMLE=muXiMLE, logLikMLE=logLikMLE, splineParMLE=splinePar, hess=hess, optimTable=optimTable, 
+       tvec=getTaperSpline(splinePar, nKnots=nKnots, normalize=normalizeTaper, dStar=dStar))
+}
 
+# gets taper vector for the given fault and spline basis parameters
+getTaperSpline = function(splinePar, fault=csz, latRange=c(40, 50), nKnots=4, 
+                          normalize=TRUE, dStar=21000) {
+  splineMat = bs(fault$latitude, df=nKnots, intercept=FALSE, Boundary.knots=latRange)
+  splineMat = cbind(rep(1, nrow(splineMat)), splineMat)
+  
+  lambdas = splineMat %*% splinePar
+  c(taper(fault$depth, lambda=lambdas, dStar=dStar, normalize=normalize))
+}
 
-
-
-
-
+# This function works poorly.  lambda estimates can be negative
+getInitialSplineEsts = function(muVecCSZ, sigmaZeta, lambda, G=NULL, nKnots=4, subDat=dr1, 
+                                normalizeTaper=TRUE, dStar=21000) {
+  # compute spline basis coefficients for subsidence data
+  latRange = c(40, 50)
+  Xi = bs(dr1$Lat, df=nKnots, intercept=FALSE, Boundary.knots=latRange)
+  Xi = cbind(rep(1, nrow(Xi)), Xi)
+  mod = lm(dr1$subsidence ~ Xi - 1)
+  preds = Xi %*% coef(mod)
+  
+  if(length(muVecCSZ)==1)
+    muVecCSZ = rep(muVecCSZ, nrow(csz))
+  expectZeta = exp(muVecCSZ + sigmaZeta^2/2)
+  
+  # compute Okada matrix if necessary
+  if(is.null(G)) {
+    nx = 300
+    ny=  900
+    lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+    latGrid = seq(latRange[1], latRange[2], l=ny)
+    G = okadaAll(csz, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=0.25)
+  }
+  
+  # recompute spline basis over csz fault geometry
+  Xi = bs(csz$latitude, df=nKnots, intercept=FALSE, Boundary.knots=latRange)
+  Xi = cbind(rep(1, nrow(Xi)), Xi)
+  
+  # compute initial estimates for spline basis coefficients for CSZ taper
+  # Xi betaHat = G diag(E[zeta]) Xi betaPrimeHat
+  y = -preds
+  Xmat = G %*% diag(expectZeta)
+  
+  lats = seq(40, 50, l=100)
+  XiLat = bs(lats, df=nKnots, intercept=FALSE, Boundary.knots=latRange)
+  XiLat = cbind(rep(1, nrow(XiLat)), XiLat)
+  sqErr = function(params) {
+    lambdaLats = XiLat %*% params
+    lambdaCSZ = Xi %*% params
+    if(any(c(lambdaLats, lambdaCSZ) < 0))
+      return(1e15)
+    mean(((y - Xmat %*% taper(csz$depth, lambda=Xi%*%params, normalize=normalizeTaper, dStar=dStar))/dr1$Uncertainty)^2)
+  }
+  opt = optim(c(lambda, rep(0, ncol(Xi)-1)), sqErr)
+  betaPrimeHat = opt$par
+  
+  lambdaVecCSZ = Xi %*% betaPrimeHat
+  lambdaVecLat = XiLat %*% betaPrimeHat
+  
+  return(list(betaHat = betaPrimeHat, lambdaVecCSZ=lambdaVecCSZ, lats=lats, lambdaVecLat=lambdaVecLat))
+}
 

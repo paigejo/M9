@@ -1,0 +1,142 @@
+
+
+\usepackage{tikz}
+\usetikzlibrary{arrows}
+\usetikzlibrary{positioning}
+\usepackage{inconsolata}
+\usepackage{listings}
+\usepackage{xcolor}
+\definecolor{commentgreen}{rgb}{.2,.7,.1}
+\definecolor{stringgreen}{rgb}{.3,.8,.2}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{epstopdf}
+\usepackage{verbatim}
+\usepackage{bbm}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+\lstset{ %
+  language=R,                     % the language of the code
+  basicstyle=\footnotesize,       % the size of the fonts that are used for the code
+  numbers=none,                   % where to put the line-numbers
+  numberstyle=\tiny\color{gray},  % the style that is used for the line-numbers
+  stepnumber=1,                   % the step between two line-numbers. If it's 1, each line
+                                  % will be numbered
+  numbersep=5pt,                  % how far the line-numbers are from the code
+  backgroundcolor=\color{white},  % choose the background color. You must add \usepackage{color}
+  showspaces=false,               % show spaces adding particular underscores
+  showstringspaces=false,         % underline spaces within strings
+  showtabs=false,                 % show tabs within strings adding particular underscores
+  frame=single,                   % adds a frame around the code
+  rulecolor=\color{black},        % if not set, the frame-color may be changed on line-breaks within not-black text (e.g. commens (green here))
+  tabsize=2,                      % sets default tabsize to 2 spaces
+  captionpos=b,                   % sets the caption-position to bottom
+  breaklines=true,                % sets automatic line breaking
+  breakatwhitespace=false,        % sets if automatic breaks should only happen at whitespace
+  title=\lstname,                 % show the filename of files included with \lstinputlisting;
+                                  % also try caption instead of title
+  keywordstyle=\color{blue},      % keyword style
+  commentstyle=\color{commentgreen},   % comment style
+  stringstyle=\color{stringgreen},      % string literal style
+  escapeinside={\%*}{*)},         % if you want to add a comment within your code
+  morekeywords={*,...}            % if you want to add more keywords to the set
+} 
+ % Activate to display a given date or no date
+
+\newcommand{\Bern}[1]{\mathcal{B} \left( #1 \right)}
+\newcommand{\Beta}[1]{Beta \left( #1 \right)}
+\newcommand{\Norm}[1]{\mathcal{N} \left( #1 \right)}
+\newcommand{\Exp}[1]{\mathcal{E} \left( #1 \right)}
+\newcommand{\Pois}[1]{Pois \left( #1 \right)}
+\newcommand{\LNorm}[1]{\mathcal{LN} \left( #1 \right)}
+\newcommand{\Gam}[1]{\Gamma \left( #1 \right)}
+\newcommand{\MVN}[1]{\text{MVN}\! \left( #1 \right)}
+
+\newcommand{\paren}[1]{\left(#1\right)}
+\renewcommand{\brack}[1]{\left[#1\right]}
+\newcommand{\bbar}[1]{\overline{#1}}
+\newcommand{\wrd}[1]{\hspace{-1in}\text{#1}}
+\newcommand{\sumi}{\sum_{i=1}^n}
+\newcommand{\defn}{\equiv}
+\newcommand{\asim}{\stackrel{\cdot}{\sim}}
+\newcommand{\indep}{\rotatebox[origin=c]{90}{$\models$}}
+\newcommand{\prodi}{\prod_{i=1}^n}
+\newcommand{\prodj}{\prod_{j=1}^n}
+\newcommand{\set}[1]{\left\{#1\right\}}
+\renewcommand{\exp}[1]{\text{exp}\left\{#1\right\}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\dto}{\stackrel{d}{\to}}
+\newcommand{\pto}{\stackrel{p}{\to}}
+\newcommand{\asto}{\stackrel{\text{a.s.}}{\to}}
+\newcommand{\pwto}{\stackrel{\text{p.w.}}{\to}}
+\newcommand{\nto}{\stackrel{\text{n}}{\to}}
+\newcommand{\deq}{\stackrel{d}{=}}
+\newcommand{\iid}{\stackrel{iid}{\sim}}
+\newcommand{\vphi}{\varphi}
+\newcommand{\U}{\mathcal{U}}
+\renewcommand{\L}{\mathcal{L}}
+\newcommand{\J}{\mathcal{J}}
+\newcommand{\tab}{\hspace*{2em}}
+\def\bal#1\eal{\begin{align*}#1\end{align*}}
+\newcommand{\bp}{\begin{pmatrix}}
+\newcommand{\ep}{\end{pmatrix}}
+\newcommand{\bvmat}{\begin{vmatrix}}
+\newcommand{\evmat}{\end{vmatrix}}
+\newcommand{\bcas}{\begin{cases}}
+\newcommand{\ecas}{\end{cases}}
+\newcommand{\sumj}{\sum_{j=1}^n}
+\newcommand{\sigest}{\hat{\sigma}_n^2}
+\newcommand{\aveX}{\overline{X}_n}
+\newcommand{\st}{\text{ s.t. }}
+\newcommand{\vy}{\vec{Y}}
+\newcommand{\vly}{\vec{y}}
+\newcommand{\x}{\mathbf{X}}
+\newcommand{\xt}{\mathbf{X}^T}
+\newcommand{\V}{\mathbf{V}}
+\newcommand{\W}{\mathbf{W}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\ve}{\vec{\varepsilon}}
+\newcommand{\abs}[1]{\left\vert #1 \right\vert}
+\newcommand{\E}[1]{E\left[#1\right]}
+\newcommand{\var}[1]{\text{Var}\left(#1\right)}
+\newcommand{\corr}[1]{\text{corr}\left(#1\right)}
+\newcommand{\cov}[1]{\text{Cov}\left(#1\right)}
+\newcommand{\skw}{\text{Skew}}
+\newcommand{\kurt}{\text{Kurt}}
+\newcommand{\ind}{\mathbbm{1}}
+\newcommand{\toinp}{\stackrel{p}{\to}}
+\newcommand{\toind}{\stackrel{d}{\to}}
+\newcommand{\B}{\mathcal{B}}
+\newcommand{\R}{\mathcal{R}}
+\newcommand{\setm}{\setminus}
+\newcommand{\Po}{\mathcal{P}}
+\newcommand{\parder}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\der}[2]{\frac{d #1}{d #2}}
+\newcommand{\mcal}[1]{\mathcal{#1}}
+\newcommand{\tbf}[1]{\textbf{#1}}
+\newcommand{\vone}{\vec{\mathbbm{1}}}
+\renewcommand{\v}[1]{\vec{#1}}
+\renewcommand{\b}[1]{\mathbf{#1}}
+\newcommand{\mbf}[1]{\mathbf{#1}}
+\renewcommand{\t}[1]{\tilde{#1}}
+\newcommand{\wt}[1]{\widetilde{#1}}
+\newcommand{\h}[1]{\hat{#1}}
+\newcommand{\wh}[1]{\widehat{#1}}
+\newcommand{\ul}[1]{\underline{#1}}
+\newcommand{\bfu}[1]{\underline{\textbf{#1}}}
+%\newcommand{\argmin}{\underset{x}{\operatorname{argmin}}}
+\DeclareMathOperator*{\argmin}{arg\hspace{-.005in}min}
+
+\newcommand{\vb}{\vec{\beta}}
+\newcommand{\vt}{\vec{\theta}}
+\newcommand{\htv}{\hat{\vec{\theta}}}
+\newcommand{\hbv}{\hat{\vec{\beta}}}
+\newcommand{\xtxi}{\paren{\mathbf{X}^T\mathbf{X}}^{-1}}
+\newcommand{\xtvixi}{\paren{\mathbf{X}^T\mathbf{V}^{-1} \mathbf{X}}^{-1}}
+
+\newcommand{\image}[2]{\includegraphics[#1]{#2}}
+
+%set max number of columns in a matrix (default number is 10)
+\setcounter{MaxMatrixCols}{20}
+

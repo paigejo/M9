@@ -11,6 +11,7 @@ source('fitModel.R')
 source("loadFloodDat.R")
 source("test.R")
 source("exploratoryAnalysisFuns.R") # -418.9, 319
+library(splines)
 
 load("fixedFit_MVN.RData")
 MLEs = fixedFitMVN$MLEs
@@ -61,4 +62,50 @@ save(testResults, file="testResults.RData")
 testResults <- fitModelIterative(maxIter=20, niterMCMC=500, saveFile="fullIterFit.RData") #params fit maxIter times, mean fit maxIter-1 times
 testResults <- fitModelIterative(maxIter=20, niterMCMC=500, saveFile="fullIterFit2.RData", loadDat="fullIterFit2.RData")
 
-testResults <- fitModelIterative(maxIter=2, niterMCMC=10, saveFile="fullIterFit.RData", usePrior=TRUE) #params fit maxIter times, mean fit maxIter-1 times
+testResults <- fitModelIterative(maxIter=30, niterMCMC=500, saveFile="fullIterFitPrior.RData", usePrior=TRUE) #params fit maxIter times, mean fit maxIter-1 times
+
+testSpline = doFitSpline(useMVNApprox = TRUE) # typical intial params: 1, log(20), 1
+testSpline2 = doFitSpline(initParams = c(MLEs[2], MLEs[3], rep(MLEs[1], 5)), useMVNApprox = TRUE)
+
+testSpline3 = doFitSpline(nKnots = 4) # typical intial params: 1, log(20), 1
+testSpline4 = doFitSpline(initParams = c(MLEs[2], MLEs[3], rep(MLEs[1], 4)), nKnots=4, useMVNApprox = TRUE)
+
+test = testSpline3
+nKnots=length(test$splineParMLE)
+lats = seq(40, 50, l=200)
+splineMat = bs(lats, df=nKnots, intercept=TRUE, Boundary.knots=latRange)
+splinePar = test$splineParMLE
+
+# first plot the lambdas curve
+lambdas = splineMat %*% splinePar
+plot(lats, lambdas, type="l")
+
+# now plot the taper for the minimum and maximum taper values
+minLambda = min(lambdas)
+maxLambda = max(lambdas)
+depths = seq(1, 21000, l=200)
+plot(depths, taper(depths, lambda=minLambda), col="red", type="l")
+lines(depths, taper(depths, lambda=maxLambda), col="green")
+
+# now plot the taper values across the fault
+lambdasCSZ = getTaperSpline(splinePar, nKnots=nKnots)
+# lambdasCSZ = seq(1, 5, l=240)
+tvec = taper(csz$depth, lambda=lambdasCSZ)
+plotFault(csz, tvec, varRange=c(0, 1))
+
+dStar = 26000
+nKnots=4
+splineInit = getInitialSplineEsts(MLEs[2], MLEs[3], MLEs[1], G, dStar=dStar)
+initParams = c(MLEs[2:3], splineInit$betaHat)
+splineFit = doFitSpline(initParams=initParams, dStar=dStar, useMVNApprox = TRUE)
+splinePar = splineFit$splineParMLE
+tvec = getTaperSpline(splinePar, nKnots=nKnots, dStar=dStar)
+plotFault(csz, tvec, varRange=c(0, 1))
+save(splineFit, file="splineFit.RData")
+
+# now impute historic quakes:
+historicQuakes = updateMu(params, G=G, tvec=tvec, niter=1000)
+save(historicQuakes, file="historicQuakes.RData")
+
+
+

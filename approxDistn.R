@@ -26,7 +26,7 @@ genLogMuSigma = function(mu, Sigma) {
 # setEventsIndep sets covariance elements from different events to be independent.
 # subDat is the subsidence dataset used to generate G
 estSubsidenceMeanCov = function(muZeta, lambda, sigmaZeta, SigmaZeta, G, tvec=NULL, 
-                                   setEventsIndep=TRUE, fault=csz, subDat=dr1) {
+                                setEventsIndep=TRUE, fault=csz, subDat=dr1) {
   subDatEvents = as.character(subDat$event)
   
   # get vector of taper values

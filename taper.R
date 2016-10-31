@@ -24,9 +24,12 @@
 # }
 
 # power exponential taper, renormalized
-taper = function(d, lambda=1, alpha=2, dStar=21000) {
-  scaledD = ((dStar - d)/dStar - 1)^alpha * lambda^alpha
-  ans = 1 - (1 - exp(-scaledD))/(1 - exp(-lambda^alpha))
+taper = function(d, lambda=1, alpha=2, dStar=21000, normalize=TRUE) {
+  scaledD = abs((dStar - d)/dStar - 1)^alpha * lambda^alpha
+  if(normalize)
+    ans = 1 - (1 - exp(-scaledD))/(1 - exp(-lambda^alpha))
+  else
+    ans = exp(-scaledD)
   ans[d > dStar] = 0
   return(ans)
 }

@@ -434,11 +434,52 @@ US(add=TRUE, lwd=1.5)
 library(splines)
 
 # generate spline basis functions in subsidence space
-Xi = bs(dr1$Lat, df=5, intercept=TRUE)
+latRange = c(40, 50)
+lats = seq(40, 50, l=50)
+Xi = bs(lats, knots=5, intercept=TRUE, Boundary.knots=latRange)
 
 # test Xi
 par(mfrow=c(1,1))
-matplot(dr1$Lat, Xi, main="Spline Basis", xlab="Latitude")
+matplot(lats, Xi, main="Spline Basis", xlab="Latitude")
+
+latRange = c(40, 50)
+nKnots=2
+knots = seq(40, 50, l=nKnots+2)[2:(nKnots+1)]
+# Xi = ns(dr1$Lat, knots=knots, intercept=TRUE, Boundary.knots=latRange)
+Xi = ns(lats, knots=knots, intercept=FALSE, Boundary.knots=latRange)
+
+# test Xi
+par(mfrow=c(1,1))
+matplot(lats, Xi, main="Spline Basis", xlab="Latitude")
+
+latRange = c(40, 50)
+nKnots=3
+knots = seq(40, 50, l=nKnots+2)[2:(nKnots+1)]
+Xi = ns(dr1$Lat, knots=knots, intercept=FALSE, Boundary.knots=latRange)
+Xi = cbind(rep(1, nrow(Xi)), Xi)
+mod = lm(dr1$subsidence ~ Xi - 1)
+Xi = ns(lats, knots=knots, intercept=FALSE, Boundary.knots=latRange)
+Xi = cbind(rep(1, nrow(Xi)), Xi)
+preds = Xi %*% coef(mod)
+plot(dr1$Lat, dr1$subsidence)
+lines(lats, preds)
+
+knots = seq(40, 50, l=nKnots+2)[2:(nKnots+1)]
+Xi = ns(dr1$Lat, knots=knots, intercept=TRUE, Boundary.knots=latRange)
+mod = lm(dr1$subsidence ~ Xi - 1)
+Xi = ns(lats, knots=knots, intercept=TRUE, Boundary.knots=latRange)
+preds = Xi %*% coef(mod)
+plot(dr1$Lat, dr1$subsidence)
+lines(lats, preds)
+
+df=4
+Xi = bs(dr1$Lat, df=df, intercept=FALSE, Boundary.knots=latRange)
+mod = lm(dr1$subsidence ~ Xi)
+Xi = bs(lats, df=df, intercept=FALSE, Boundary.knots=latRange)
+preds = coef(mod)[1] + Xi %*% coef(mod)[2:length(coef(mod))]
+plot(dr1$Lat, dr1$subsidence)
+lines(lats, preds)
+matplot(Xi)
 
 # get Okada linear transformation matrix
 nx = 300
@@ -1969,7 +2010,7 @@ for(i in 1:ncol(muMatGPS)) {
   untaperedMeanSlip = exp(meanVec + sigmaZeta^2/2)
   taperedMeanSlip = taper(slipDatCSZ$Depth, lambda)*untaperedMeanSlip
   quilt.plot(slipDatCSZ$lon, slipDatCSZ$lat, taperedMeanSlip, main=paste0("Mean slip at iteration ", i), 
-             zlim=c(0,35))
+             zlim=c(0,30))
   map("world", "Canada", add=TRUE, lwd=1.5)
   US(add=TRUE, lwd=1.5)
   plotFault(csz, plotData = FALSE, new=FALSE)
@@ -2028,7 +2069,7 @@ print(cbind(meanMags, hiMags))
 
 # explore likelihood of the fit model through the iterations:
 print(tail(state$optimTables[[1]][,4:6]))
-for(i in 1:length(state$optimTables)) {
+for(i in 2:length(state$optimTables)) {
   print(tail(state$optimTables[[i]][,3:5]))
 }
 state$logLiks
@@ -2039,5 +2080,53 @@ parMat
 # parameters seem to converge (with the exception of muXi, 
 # since the mean vector is changing).  sigmaZeta decreases monotonically (?), 
 # as expected
+
+##### Check to see if imputed data makes sense:
+load("fullIterFitPrior.RData")
+
+nx = 300
+ny=  900
+lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+latGrid = seq(latRange[1], latRange[2], l=ny)
+G = okadaAll(fault, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=0.25)
+
+tvec = taper(csz$depth, lambda=0.25)
+
+test = updateMuGivenStan(subFunIns$params, state$lastStanResults, subFunIns$muVec, G=G)
+# Only use events that have at least 5 observations (leaves out T12, T11, and T9a)
+minObs = 5
+numObs = table(subDat$event)
+threshUniqueEvents = uniqueEvents[numObs >= minObs]
+
+for(i in 1:length(threshUniqueEvents)) {
+  thisEvent = threshUniqueEvents[i]
+  subDatInds = events == thisEvent
+  subDat = dr1[subDatInds,]
+  thisG = G[subDatInds,]
+  thisMean = exp(test$muMat[,i] + diag(test$Sigmas[[i]])/2)
+  thisSubMean = thisG %*% (tvec * thisMean)
+  
+  thisRange = range(c(-subDat$subsidence, thisSubMean))
+  plot(subDat$Lat, -subDat$subsidence, main=thisEvent, ylim=thisRange)
+  points(subDat$Lat, thisSubMean, col="blue")
+}
+
+goldfinger = read.csv("goldfinger2012Table8.csv", header=TRUE)
+dr1Events = c(1:10, 12:17, 19:20, 22, 24, 28:29)
+dr1Events = 1:31 # only keep events after and including T13
+goldfinger = goldfinger[dr1Events,]
+
+#####
+# test taper types:
+dStar = 26000
+test = getInitialSplineEsts(MLEs[2], MLEs[3], MLEs[1], G)
+testNoNorm = getInitialSplineEsts(MLEs[2], MLEs[3], MLEs[1], G, normalizeTaper = FALSE)
+testStar = getInitialSplineEsts(MLEs[2], MLEs[3], MLEs[1], G, dStar=dStar)
+plotFault(csz, taper(csz$depth, lambda=test$lambdaVecCSZ), legend.mar = 10)
+plotFault(csz, taper(csz$depth, lambda=testNoNorm$lambdaVecCSZ, normalize=FALSE), legend.mar = 10)
+plotFault(csz, taper(csz$depth, lambda=testStar$lambdaVecCSZ, dStar=dStar), legend.mar=10)
+
+# get predictions from spline fit model
+
 
 
