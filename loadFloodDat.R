@@ -91,8 +91,66 @@ loadFloodDat = function() {
   dr1 <<- dr1[inds,]
   events <<- as.character(dr1$event)
   
+  # divide uncertainty by 2 because Uncertainty seems to represent 1.96 sigma
+  dr1$Uncertainty <<- dr1$Uncertainty/qnorm(0.975)
+  
   # subset GPS data by whether it's in the CSZ fault geometry boundaries
   slipDatCSZ <<- getFaultGPSDat()
+  
+  # piecewise linear spline
+  coastLonLat = matrix(c(-127, 50, 
+                         -124.8, 49.2, 
+                         -125.85, 49.1, 
+                         -124.3, 48.2, 
+                         -123.8, 46.3, 
+                         -124.1, 43.7, 
+                         -124.5, 42.85, 
+                         -124.1, 40.85, 
+                         -124.4, 40.5, 
+                         -124, 40), byrow = TRUE, ncol=2)
+  coastLon <<- coastLonLat[,1]
+  coastLat <<- coastLonLat[,2]
+  
+  getSubPoints = function(nPoints) {
+    # get some points from the line in the piecewise spline.
+    
+    # first get the latitudes of the points
+    maxLat = max(coastLat)
+    minLat = min(coastLat)
+    allCoastLats = seq(minLat, maxLat, length=nPoints)
+    
+    # now find alpha (for the interpolation) for each section.
+    # take a weighted average in between each point
+    
+    # for the given latitude, compute the longitude for the 
+    # piecewise spline
+    getLon = function(lat) {
+      # first deal with base case
+      if(lat == 40)
+        return(coastLon[length(coastLon)])
+      
+      # get index of point that is the first smaller than the given lat
+      last = match(TRUE, coastLat < lat)
+      # now get the point right before the first point smaller
+      first = last-1
+      
+      # get coordinates of the points to interpolate
+      lastCoords = coastLonLat[last,]
+      firstCoords = coastLonLat[first,]
+      
+      # interpolate (alpha and 1-alpha are weights for first and last)
+      alpha = (lat - lastCoords[2])/(firstCoords[2] - lastCoords[2])
+      # now make sure to do the interpolation
+      return(alpha*firstCoords[1] + (1-alpha)*lastCoords[1])
+    }
+    # Now vectorize the above function
+    allLon = sapply(allCoastLats, getLon)
+    allCoords = cbind(allLon, allCoastLats)
+    return(allCoords)
+  }
+  allCoastCoords <<- getSubPoints(250)
+  allCoastLon <<- allCoastCoords[,1]
+  allCoastLat <<- allCoastCoords[,2]
   
   # read in Goldfinger 2012 age data
   # ages <<- read.csv("goldfingerAgeEsts.csv", header=TRUE)
@@ -141,14 +199,15 @@ loadFloodDat = function() {
 }
 
 ##### function for subsetting GPS data by whether it is in CSZ fault geometry
-getFaultGPSDat = function() {
+# dat is a dataframe with lon and lat columns
+getFaultGPSDat = function(dat=slipDat) {
   
   # helper function for determining if GPS data is within a specific subfault geometry
   getSubfaultGPSDat = function(i) {
     row = faultGeom[i,]
     geom = calcGeom(row)
     corners = geom$corners[,1:2]
-    in.poly(cbind(slipDat$lon, slipDat$lat), corners)
+    in.poly(cbind(dat$lon, dat$lat), corners)
   }
   
   # construct logical matrix, where each column is the result of getSubfaultGPSDat(j)
@@ -158,7 +217,7 @@ getFaultGPSDat = function() {
   inFault = apply(inSubfaults, 1, any)
   
   # return the GPS data within the fault
-  slipDat[inFault,]
+  dat[inFault,]
 }
 
 loadFloodDat()

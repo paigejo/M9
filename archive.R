@@ -571,3 +571,184 @@ subLikGivenGPS = function(sdInflation, params, SigmaZtoD, SigmaD, G=NULL) {
   
   logFYGivenX
 }
+
+
+
+################# exponential priors
+##### exponential priors and gradients
+# get prior on subsidence 95th quantile (exponential with 95% < 2m)
+priorSubLikExp = function(muZeta, sigmaZeta, tvec, G=NULL, fauxG=NULL, subDat=dr1, fauxObs=getFauxObs(), rate=qexp(.95)/3) {
+  
+  ##### compute unit slip Okada seadef if necessary
+  if(is.null(G)) {
+    nx = 300
+    ny=  900
+    lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+    latGrid = seq(latRange[1], latRange[2], l=ny)
+    G = okadaAll(csz, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=lambda0)
+  }
+  if(is.null(fauxG))
+    fauxG = getFauxG(fauxObs)
+  fullG = rbind(G, fauxG)
+  
+  # make our faux observations look like actual dr1 data (the event doesn't really matter in our case 
+  # since we just want marginal variance and expectation)
+  fauxDat = data.frame(list(Lon=fauxObs[,1], Lat=fauxObs[,2], Uncertainty=mean(subDat$Uncertainty), 
+                            event="T1"))
+  
+  # combine relevant part of real and faux observations
+  tmp = data.frame(list(Lon=subDat$Lon, Lat=subDat$Lat, Uncertainty=subDat$Uncertainty, event=subDat$event))
+  fullDat = rbind(tmp, fauxDat)
+  
+  load("arealCSZCor.RData")
+  corMatCSZ = arealCSZCor
+  covMatCSZ = sigmaZeta^2 * corMatCSZ
+  
+  # This is the key step: approximate G %*% T %*% Zeta with a MVN
+  mvnApprox = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, covMatCSZ, fullG, subDat=fullDat, 
+                                   tvec=tvec)
+  mu = -mvnApprox$mu # MUST TAKE NEGATIVE HERE, SINCE SUBSIDENCE NOT UPLIFT!!!!
+  Sigma = mvnApprox$Sigma
+  
+  ##### get 95th quantiles of subsidence
+  sigmas = sqrt(diag(Sigma) + fullDat$Uncertainty^2)
+  quants = qnorm(.95, mu, sigmas)
+  
+  # get maximum expected subsidence
+  maxSub = max(quants)
+  
+  # return log prior likelihood
+  dexp(maxSub, rate, log=TRUE)
+}
+
+# get prior subsidence likelihood gradient
+priorSubLikGradExp = function(muZeta, sigmaZeta, lambda, Xi, tvec, SigmaYGrad, G=NULL, fauxG=NULL, subDat=dr1, 
+                              fauxObs=getFauxObs(), rate=qexp(.95)/3, fault=csz, normalizeTaper=TRUE, 
+                              dStar=21000) {
+  ##### compute unit slip Okada seadef if necessary
+  if(is.null(G)) {
+    nx = 300
+    ny=  900
+    lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+    latGrid = seq(latRange[1], latRange[2], l=ny)
+    G = okadaAll(csz, lonGrid, latGrid, cbind(subDat$Lon, subDat$Lat), slip=1, poisson=lambda0)
+  }
+  if(is.null(fauxG))
+    fauxG = getFauxG(fauxObs)
+  fullG = rbind(G, fauxG)
+  
+  ##### generate faux data
+  # make our faux observations look like actual dr1 data (the event doesn't really matter in our case 
+  # since we just want marginal variance and expectation)
+  fauxDat = data.frame(list(Lon=fauxObs[,1], Lat=fauxObs[,2], Uncertainty=mean(subDat$Uncertainty), 
+                            event="T1"))
+  
+  # combine relevant part of real and faux observations
+  tmp = data.frame(list(Lon=subDat$Lon, Lat=subDat$Lat, Uncertainty=subDat$Uncertainty, event=subDat$event))
+  fullDat = rbind(tmp, fauxDat)
+  
+  # get zeta mean vector and log zeta covariance
+  load("arealCSZCor.RData")
+  corMatCSZ = arealCSZCor
+  covMatCSZ = sigmaZeta^2 * corMatCSZ
+  expectZeta = exp(muZeta + diag(covMatCSZ)/2)
+  
+  # get zeta covariance matrix (covariance of zeta, NOT log(zeta))
+  covZeta = exp(covMatCSZ) - 1
+  covZeta = sweep(covZeta, 1, expectZeta, "*")
+  covZeta = sweep(covZeta, 2, expectZeta, "*")
+  
+  # This is the key step: approximate G %*% T %*% Zeta with a MVN
+  mvnApprox = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, covMatCSZ, fullG, subDat=fullDat, 
+                                   tvec=tvec)
+  mu = -mvnApprox$mu # MUST TAKE NEGATIVE HERE, SINCE SUBSIDENCE NOT UPLIFT!!!!
+  Sigma = mvnApprox$Sigma
+  
+  ##### get 95th quantiles of subsidence
+  sigmas = sqrt(diag(Sigma) + fullDat$Uncertainty^2)
+  quants = qnorm(.95, mu, sigmas)
+  
+  # get maximum expected subsidence
+  maxSubI = which.max(quants)
+  
+  ##### compute gradient
+  # gradient of EY. MUST TAKE NEGATIVE HERE, SINCE SUBSIDENCE NOT UPLIFT!!!!
+  expectGrad = -meanGrad(expectZeta, lambda, Xi, fullG, fault, normalizeTaper, dStar, muZeta, sigmaZeta, index=maxSubI)
+  
+  # get gradient of SigmaY (for faux observations, we already have for true observations)
+  SigmaYGradFaux = covGrad(covZeta, lambda, tvec, Xi, fauxG, fault, normalizeTaper, dStar, 
+                           muZeta, sigmaZeta, subDat=fauxDat)
+  
+  # get only parts of SigmaY gradient we need (gradient of cov(Y_i, Y_i), no cross-covariances needed)
+  getVarGrad = function(SigmaGrad) {
+    n = dim(SigmaGrad)[1]
+    p = dim(SigmaGrad)[3]
+    inds1 = rep(1:n, p)
+    inds2 = rep(1:p, each=n)
+    matrix(SigmaGrad[cbind(inds1, inds1, inds2)], ncol=p)
+  }
+  varGradObs = getVarGrad(SigmaYGrad)
+  varGradFaux = getVarGrad(SigmaYGradFaux)
+  varGrad = rbind(varGradObs, varGradFaux)
+  sdGrad = sweep(varGrad, 1, 1/2 * 1/sigmas, "*")
+  
+  # compute the gradient we're actually interested in: gradient of log prior likelihood
+  -rate * (expectGrad + sdGrad[maxSubI,] * qnorm(.95))
+}
+
+# prior on expected earthquake slip.  95% chance that max slip < 40m
+priorSlipLikExp = function(muZeta, sigmaZeta, tvec, rate=qexp(.95)/40) {
+  
+  # get log zeta variances
+  load("arealCSZCor.RData")
+  corMatCSZ = arealCSZCor
+  varCSZ = sigmaZeta^2 * diag(corMatCSZ)
+  sigmaCSZ = sqrt(varCSZ)
+  
+  # compute slip log scale means and standard deviations
+  muSlip = muZeta + log(tvec)
+  sigmaSlip = sigmaCSZ
+  
+  # compute 95th percentiles of distributions
+  quants = qlnorm(.95, muSlip, sigmaSlip)
+  
+  # get log likelihood
+  maxSlip = max(quants)
+  dexp(maxSlip, rate, log=TRUE)
+}
+
+# prior on expected earthquake slip.  95% chance that max slip < 40m
+priorSlipLikGradExp = function(muZeta, sigmaZeta, tvec, lambda, Xi, fault=csz, normalizeTaper=TRUE, 
+                               dStar=21000, rate=qexp(.95)/40) {
+  
+  # get log zeta variances
+  load("arealCSZCor.RData")
+  corMatCSZ = arealCSZCor
+  varCSZ = sigmaZeta^2 * diag(corMatCSZ)
+  sigmaCSZ = sqrt(varCSZ)
+  d = sqrt(diag(corMatCSZ))
+  
+  # compute slip log scale means and standard deviations
+  muSlip = muZeta + log(tvec)
+  sigmaSlip = sigmaCSZ
+  
+  # compute 95th percentiles of slip distributions
+  quants = qlnorm(.95, muSlip, sigmaSlip)
+  
+  # get maximum slip
+  maxSlipI = which.max(quants)
+  q95 = quants[maxSlipI]
+  
+  ##### compute gradients
+  # get taper gradient
+  tGrad = taperGrad(fault$depth, Xi, lambda, dStar, normalizeTaper)
+  
+  # get 95th percentile gradient
+  di = d[maxSlipI]
+  ti = tvec[maxSlipI]
+  tGradI = tGrad[maxSlipI,]
+  q95Grad = matrix(c(q95, di * qnorm(.95) * q95, q95/ti * tGradI), nrow=1)
+  
+  # now get log slip prior gradient
+  -rate * q95Grad
+}

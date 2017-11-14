@@ -332,6 +332,124 @@ getSubfaultCenter = function(row, index=2) {
   return(centers[index,])
 }
 
+getFaultPolygons = function(fault=csz) {
+  if(length(unique(fault$Fault)) != length(fault$Fault)) {
+    fault$Fault = 1:nrow(fault)
+  }
+  
+  calcSubfaultPolygon = function(subfault) {
+    tmp = subfault
+    if(!is.list(subfault)) {
+      tmp = matrix(subfault, ncol=length(subfault))
+      colnames(tmp) = names(subfault)
+      tmp = data.frame(tmp)
+    }
+    subfault = tmp
+    
+    subFaultPoly = calcGeom(subfault)$corners[,1:2]
+    return(cbind(subfault$Fault, subFaultPoly))
+  }
+  
+  # faultPolys = apply(fault, 1, calcSubfaultPolygon)
+  subfaultList = list()
+  for(i in 1:nrow(fault)) {
+    subfaultList = c(subfaultList, list(fault[i,]))
+  }
+  faultPolys = lapply(subfaultList, calcSubfaultPolygon)
+  faultPolys = do.call("rbind", faultPolys)
+  faultPolys = data.frame(list(Fault=faultPolys[,1], longitude=faultPolys[,2], latitude=faultPolys[,3]))
+  return(faultPolys)
+}
+
+##### now make ggplot fault plotters
+
+# plot all subfaults in the fault using ggplot.  Don't add data, returns the geom_polygon object
+ggPlotFault = function(fault=csz, color="black") {
+  faultPolys = getFaultPolygons(fault)
+  geom_polygon(aes(x=longitude, y=latitude, group=factor(Fault)), data=faultPolys, 
+               fill=rgb(1,1,1, 0), color=color)
+}
+
+ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE, 
+                          logScale=FALSE, xlim=c(-128, -122), ylim=c(39.5, 50.5), 
+                          xlab="Longitude", ylab="Latitude", main="Cascadia Subduction Zone", 
+                          clab="Depth (m)", addLegend=TRUE, lwd=1) {
+  
+  # get relevant map data
+  states <- map_data("state")
+  west_coast <- subset(states, region %in% c("california", "oregon", "washington"))
+  canada = map_data("world", "Canada")
+  
+  if(!is.data.frame(rows))
+    rows = data.frame(rows)
+  
+  # rename row$Fault so that each fault gets unique name
+  rows$Fault=1:nrow(rows)
+  
+  # if the user supplies a variable to plot in plotVar:
+  if(!is.character(plotVar)) {
+    rows$tmp = plotVar
+    plotVar = "tmp"
+  }
+  
+  # make fault polygons
+  faultDat = getFaultPolygons(rows)
+  faultDat = merge(faultDat, rows[,c("Fault", plotVar)], by=c("Fault"))
+  faultDat$plotVar=faultDat[,plotVar]
+  
+  # grey maps plot:
+  bg = ggplot(faultDat, aes(x=longitude, y=latitude)) + 
+    geom_polygon(aes(x = long, y = lat, group = group), fill = "grey", color = "black", data=canada) +
+    geom_polygon(aes(x = long, y = lat, group = group), fill = "grey", color = "black", data=west_coast) + 
+    coord_fixed(xlim = xlim,  ylim = ylim, ratio = 1.3, expand=FALSE) + 
+    labs(x=xlab, y=ylab) + scale_x_continuous("Longitude", c(-127, -125, -123), labels=c("-127", "", "-123"), limits=c(-360, 360)) + 
+    theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(), 
+          panel.background = element_rect(fill='lightblue1'))
+  
+  # generate fault polygons portion of plot
+  
+  if(!plotData) {
+    # faultPoly = ggPlotFault(rows, color=rgb(.2,.2,.2))
+    pl = bg + geom_polygon(aes(fill=rgb(1,1,1,0), group=factor(Fault)), color="black", size=lwd)
+  }
+  else {
+    faultPoly = geom_polygon(aes(fill=plotVar, group=factor(Fault)), color="black", size=lwd)
+    
+    if(is.null(varRange)) {
+      if(logScale)
+        pl = bg + faultPoly + scale_fill_distiller(clab, palette = "Spectral", direction=-1, trans="log") + 
+          ggtitle(main)
+      else
+        pl = bg + faultPoly + scale_fill_distiller(clab, palette = "Spectral", direction=-1) +
+          ggtitle(main)
+    }
+    else {
+      if(logScale)
+        pl = bg + faultPoly + scale_fill_distiller(clab, palette = "Spectral", direction=-1, trans="log", 
+                                                   limits=varRange) + 
+          ggtitle(main)
+      else
+        pl = bg + faultPoly + scale_fill_distiller(clab, palette = "Spectral", direction=-1, 
+                                                   limits=varRange) +
+          ggtitle(main)
+    }
+    # ii <- cut(values, breaks = seq(min(values), max(values), len = 100), 
+    #           include.lowest = TRUE)
+    # ## Use bin indices, ii, to select color from vector of n-1 equally spaced colors
+    # colors <- colorRampPalette(c("lightblue", "blue"))(99)[ii]
+    # if(logScale)
+    #   faultPoly = faultPoly + scale_fill_manual("", palette = "Spectral", direction=-1, trans="log")
+    # else
+    #   faultPoly = faultPoly + scale_fill_distiller("", palette = "Spectral", direction=-1)
+  }
+  
+  if(addLegend)
+    pl + guides(color=FALSE)
+  else
+    pl + guides(color=FALSE, fill=FALSE)
+}
+
 
 
 
