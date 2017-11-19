@@ -1,8 +1,6 @@
 # this script is for cross-validation
 
 library(fields)
-library(rstan)
-library(corpcor) # for fast computation of pseudoinverse
 setwd("~/git/M9/")
 source("taper.R")
 source("okada.R")
