@@ -276,7 +276,7 @@ predsGivenGPS = function(params, nsim=100, muVec=NULL, tvec=NULL, fault=csz, pos
 # generate predictions given only the parameter MLEs (no GPS or subsidence data)
 preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nrow(fault)), 
                  posNormalModel=FALSE, normalModel=posNormalModel, phiZeta=NULL, 
-                 diffGPSTaper=FALSE) {
+                 taperedGPSDat=FALSE) {
   # get parameters
   if(is.null(muVec)) {
     lambda = params[1]
@@ -322,7 +322,7 @@ preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nr
 #   Sigma = stationary.cov(xp, Covariance="Matern", Distance="rdist.earth", Dist.args=list(miles=FALSE), 
 #                          theta=phiZeta, smoothness=nuZeta, onlyUpper=TRUE) * sigmaZeta^2
   # Load the precomputed correlation matrix.
-  if(!diffGPSTaper) {
+  if(!taperedGPSDat) {
     arealCSZCor = getArealCorMat(fault, normalModel=normalModel)
   }
   else {
@@ -338,14 +338,17 @@ preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nr
   # generate predictive simulations
   notAllPos=TRUE
   zetaSims = matrix(-1, nrow=nrow(xp), ncol=nsim)
+  nNewSims = nsim
   while(notAllPos) {
     # generate simulations until all slips are positive, if necessary
     negCol = function(simCol) {
       any(simCol < 0)
     }
     negCols = apply(zetaSims, 2, negCol)
-    nNewSims = sum(negCols)
-    print(paste0("number of simulations remaining: ", nNewSims))
+    if(nNewSims != sum(negCols)) {
+      nNewSims = sum(negCols)
+      print(paste0("number of simulations remaining: ", nNewSims))
+    }
     
     zSims = matrix(rnorm(nNewSims*nrow(xp)), nrow=nrow(xp), ncol=nNewSims)
     logZetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
@@ -2248,7 +2251,7 @@ extractStanPredictions3 = function(stanResults, estVarMat=TRUE) {
 # perform cross-validation for the given model and event.  Only try to predict subsidence data for the given event using predictive distribution
 doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1", niter=500, 
                   G=NULL, prior=FALSE, normalizeTaper=FALSE, dStar=28000, 
-                  tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], dStar=dStar, normalize=normalizeTaper), 
+                  tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], normalize=normalizeTaper), 
                   priorMaxSlip=NA, normalModel=FALSE, posNormalModel=FALSE, nFold=20, seed=123, 
                   bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE) {
   
@@ -2456,8 +2459,10 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
 # perform cross-validation for the given model and event.  Only try to predict subsidence data for the given 
 # event using marginal distribution.  niter only matters for posnormal model, where mean and var too difficult 
 # to compute analytically
-getEventMSE = function(fault=csz, subDat=dr1, testEvent="T1", niter=500, G=NULL, fauxG=NULL, 
-                       normalModel=FALSE, posNormalModel=FALSE, seed=123, normalizeTaper=FALSE, dStar=28000) {
+getEventMSE = function(params, fault=csz, subDat=dr1, testEvent="T1", niter=500, G=NULL, fauxG=NULL, 
+                       normalModel=FALSE, posNormalModel=FALSE, seed=123, normalizeTaper=FALSE, 
+                       tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], normalize=normalizeTaper), 
+                       dStar=28000, taperedGPSDat=FALSE, gpsDat=slipDatCSZ) {
   
   # set the seed so that data is scrambled the same way every time, no matter the model
   set.seed(seed)
@@ -2472,33 +2477,11 @@ getEventMSE = function(fault=csz, subDat=dr1, testEvent="T1", niter=500, G=NULL,
   GOther = G[as.character(subDat$event) != testEvent,]
   
   # plot data
-  plot(dr1$Lon, dr1$Lat, main="Event data", xlab="Lon", ylab="Lat", type="n")
+  plot(subDat$Lon, subDat$Lat, main="Event data", xlab="Lon", ylab="Lat", type="n")
   points(eventDat$Lon, eventDat$Lat, pch="+", col="red")
   map("world", "Canada", add=TRUE)
   US(add=TRUE)
   
-  ## fit the marginal distribution based on all data but the event data
-  nKnots=5
-  dStar=21000
-  
-  if(normalModel) {
-    initPar=c(20,15, 1, rep(0, nKnots-1))
-    splineFit21k5N = doFitSpline(initParams=initPar, dStar=dStar, useMVNApprox=TRUE, 
-                                 useGrad=TRUE, nKnots=nKnots, maxit=500, useSubPrior=FALSE, useSlipPrior=FALSE, G=GOther, 
-                                 fauxG=fauxG, constrLambda=FALSE, subDat=otherDat, fault=fault, 
-                                 normalModel=TRUE)
-    params = splineFit21k5N$MLEs
-  }
-  else{
-    initPar=c(2, 1.5, 1, rep(0, nKnots-1))
-    splineFit21k5LN = doFitSpline(initParams=initPar, dStar=dStar, useMVNApprox=TRUE, 
-                                  useGrad=TRUE, nKnots=nKnots, maxit=500, useSubPrior=FALSE, useSlipPrior=FALSE, G=GOther, 
-                                  fauxG=fauxG, constrLambda=FALSE, subDat=otherDat, fault=fault, 
-                                  normalModel=FALSE)
-    params = splineFit21k5LN$MLEs
-  }
-  splinePar = params[6:length(params)]
-  tvec = getTaperSpline(splinePar, nKnots=nKnots, dStar=dStar, fault=fault, normalize=normalizeTaper)
   muVec = NULL
   
   ## now get MSE, bias, variance
@@ -2509,9 +2492,13 @@ getEventMSE = function(fault=csz, subDat=dr1, testEvent="T1", niter=500, G=NULL,
   #   niter = 2
   
   # get marginal subsidence distribution (`subsidence` predictions are really uplift)
-  preds = preds(params, niter, fault, muVec, tvec, posNormalModel, normalModel)
-  subPreds = predsToSubsidence(params, preds, fault, useMVNApprox=TRUE, GEvent, 
-                               eventDat, posNormalModel, normalModel, tvec)
+  if(taperedGPSDat)
+    phiZeta = params[length(params)]
+  else 
+    phiZeta=NULL
+  preds = preds(params, niter, fault, muVec, tvec, posNormalModel, normalModel, phiZeta, taperedGPSDat)
+  subPreds = predsToSubsidence(params, preds, fault, FALSE, GEvent, eventDat, 
+                               posNormalModel, normalModel, tvec, normalizeTaper, dStar)
   
   # under positive normal model, must estimate bias and variance from simulations.  Otherwise 
   # MSE is determined analytically.  NOTE: need to verify analytical solution
@@ -2522,5 +2509,5 @@ getEventMSE = function(fault=csz, subDat=dr1, testEvent="T1", niter=500, G=NULL,
   variance = mean(variances)
   mse = mean(err^2)
   
-  return(list(MSE=mse, bias=bias, variance=variance))
+  return(list(MSE=mse, bias=bias, variance=variance, weight=sum(1/eventDat$Uncertainty^2), nObs = nrow(eventDat)))
 }
