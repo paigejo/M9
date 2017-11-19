@@ -431,7 +431,7 @@ getArealCorMat = function(fault=csz, params=NULL, normalModel=FALSE) {
 # muZeta.  Requires the (constant) muZeta and the covariance matrix covMatCSZ of the GP.
 # NOTE: this fit might take a while
 
-getPosNormMu = function(muZeta, covMatCSZ, startN=20, initNewMu=muZeta) {
+getPosNormMu = function(muZeta, covMatCSZ, startN=20, initNewMu=mean(muZeta)) {
   require(mvtnorm)
   n = startN
   maxN = nrow(covMatCSZ)
@@ -456,7 +456,7 @@ getPosNormMu = function(muZeta, covMatCSZ, startN=20, initNewMu=muZeta) {
 }
 
 # helper function for getPosNormMuN
-getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=muZeta, extraFac=1) {
+getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=mean(muZeta), extraFac=1) {
   sigmaTest = covMatCSZ[1:n,1:n]
   
   newMu = newMuInit
@@ -466,7 +466,7 @@ getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=muZeta, extraFac=1) 
     meanTest = rep(newMu, n)
     out <- mtmvnorm(mean=meanTest, sigma=sigmaTest, lower=rep(0, n), doComputeVariance = FALSE)
     adjustedMu = mean(out$tmean)
-    muDiff = adjustedMu - muZeta
+    muDiff = adjustedMu - mean(muZeta)
     newMu = newMu - muDiff*extraFac
     
     # for linear extrapolation, extraFac=1, otherwise, usually must be larger for faster convergence

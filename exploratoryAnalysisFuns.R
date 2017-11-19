@@ -674,6 +674,11 @@ getMomentFromSlip = function(slips, rigidity=4*10^10, doTaper=FALSE, lambda=1, f
   
   Mo = sum(slips*rigidity*areas)
   
+  if(Mo <= 0) {
+    warning("negative seismic moment observed")
+    return(0)
+  }
+  
   (log10(Mo) - 9.05)/1.5
 }
 
@@ -1592,6 +1597,15 @@ ggCompareModels = function(modelFitList,
     u95Noise = subPreds$u95Noise
     l95Noise = subPreds$l95Noise
     slipSD = apply(slipPreds$slipSims, 1, sd)
+    myQuant = function(xs) {
+      obs = xs[1]
+      xs = xs[-1]
+      mean(xs <= obs)
+    }
+    subQuant = apply(cbind(subDat$subsidence, -subPreds$noiseSims), 1, myQuant)
+    outOfBounds = (subQuant < .025) | (subQuant > .975)
+    normResids = qnorm(p=subQuant)
+    normResids[!is.finite(normResids)] = NA
     
     ##### generate mean seaDef field from Okada model
     # set Okada subsidence grid
@@ -1621,16 +1635,37 @@ ggCompareModels = function(modelFitList,
     ordDat = subDat[ord,]
     ordL95 = l95Noise[ord]
     ordU95 = u95Noise[ord]
-    tmp = cbind(ordDat, ordL95, ordU95)
-    pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col="red"), shape=3, data=tmp) + 
+    # tmp = cbind(ordDat, ordL95, ordU95)
+    # pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col="red"), shape=3, data=tmp) + 
+    #   scale_y_continuous("Latitude", limits=latRange) + 
+    #   labs(x="Subsidence (m)", y="Latitude") + geom_path(aes(x=-ordL95, y=Lat), col="blue", data=tmp) +
+    #   geom_path(aes(x=-ordU95, y=Lat), col="blue", data=tmp) + guides(col=FALSE) + 
+    #   ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
+    #   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+    #         panel.grid.minor = element_blank(), 
+    #         panel.background = element_rect(fill='white'))
+    allShapes = rep(19, length(normResids))
+    allShapes[outOfBounds] = 18
+    allShapes = allShapes[ord]
+    normResids = normResids[ord]
+    aboveBounds = subQuant[ord] > .975
+    belowBounds = subQuant[ord] < .025
+    outOfBounds = outOfBounds[ord]
+    tmp = cbind(ordDat, ordL95, ordU95, normResids, outOfBounds, aboveBounds, belowBounds)
+    pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col=normResids, fill=normResids), shape=19, size=.3, data=tmp[!outOfBounds,]) + 
+      geom_point(aes(x=subsidence, y=Lat), shape=17, col="purple", size=.5, data=tmp[aboveBounds,], inherit.aes=FALSE) +
+      geom_point(aes(x=subsidence, y=Lat), shape=17, col="green", size=.5, data=tmp[belowBounds,], inherit.aes=FALSE) +
       scale_y_continuous("Latitude", limits=latRange) + 
-      labs(x="Subsidence (m)", y="Latitude") + geom_path(aes(x=-ordL95, y=Lat), col="blue", data=tmp) +
-      geom_path(aes(x=-ordU95, y=Lat), col="blue", data=tmp) + guides(col=FALSE) + 
+      labs(x="Subsidence (m)", y="Latitude") + guides(shape=FALSE, fill=FALSE) + 
+      scale_color_distiller("", palette = "RdBu", direction=-1, limits=c(-qnorm(.975), qnorm(.975))) + 
       ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
       theme(panel.border = element_blank(), panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(), 
             panel.background = element_rect(fill='white'))
+    # geom_point(aes(x=subsidence, y=Lat, fill=normResids), shape=17, col="black", size=.3, data=tmp[outOfBounds,], inherit.aes=FALSE) +
+    # scale_shape_manual(values=c(19, 17)) + 
     plots = c(plots, list(pl2))
+    
     
     # plot magnitude distribution
     mags = apply(slipPreds$slipSims, 2, getMomentFromSlip, fault=fault, dStar=dStar, normalizeTaper=normalizeTaper)
@@ -1725,3 +1760,5 @@ ggplotSubsidenceResiduals = function(modelFit, tvec, subDat, G, latRange=c(40,50
           panel.grid.minor = element_blank(), 
           panel.background = element_rect(fill='white'))
 }
+
+

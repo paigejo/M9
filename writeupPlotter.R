@@ -458,7 +458,7 @@ slipPredsSub = preds(fitSub$MLEs, nsim=10000, fault=csz, tvec=fitSub$tvec,
 subPredsSub = predsToSubsidence(fitSub$MLEs, slipPreds, G=G, useMVNApprox=FALSE, subDat=dr1, 
                                  posNormalModel=FALSE, normalModel=TRUE, tvec=fitSub$tvec)
 
-# now compute summary statistics for slip for combinaed and subsidence models
+# now compute summary statistics for slip for combined and subsidence models
 lowComb = apply(slipPredsComb$slipSims, 1, quantile, probs=.025)
 hiComb = apply(slipPredsComb$slipSims, 1, quantile, probs=.975)
 meanComb = rowMeans(slipPredsComb$slipSims)

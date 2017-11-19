@@ -345,6 +345,7 @@ preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nr
     }
     negCols = apply(zetaSims, 2, negCol)
     nNewSims = sum(negCols)
+    print(paste0("number of simulations remaining: ", nNewSims))
     
     zSims = matrix(rnorm(nNewSims*nrow(xp)), nrow=nrow(xp), ncol=nNewSims)
     logZetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
@@ -1139,6 +1140,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
     
     if(posNormalModel) {
       notAllPos=TRUE
+      nNewSims = niter*2
       zetaSims = matrix(-1, nrow=nrow(Lc), ncol=niter*2) # multiply by two for consistency with Stan MCMC results
       while(notAllPos) {
         # generate simulations until all slips are positive, if necessary
@@ -1149,7 +1151,10 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
           any(simCol < 0)
         }
         negCols = apply(zetaSims, 2, negCol)
-        nNewSims = sum(negCols)
+        if(nNewSims != sum(negCols)) {
+          nNewSims = sum(negCols)
+          print(paste0("number of simulations remaining: ", nNewSims))
+        }
         
         zSims = matrix(rnorm(nNewSims*nrow(Lc)), nrow=nrow(Lc), ncol=nNewSims)
         thisZetaSims = sweep(Lc %*% zSims, 1, muc, "+") # add muZeta to each zero mean simulation
@@ -2245,7 +2250,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
                   G=NULL, prior=FALSE, normalizeTaper=FALSE, dStar=28000, 
                   tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], dStar=dStar, normalize=normalizeTaper), 
                   priorMaxSlip=NA, normalModel=FALSE, posNormalModel=FALSE, nFold=20, seed=123, 
-                  bySite=FALSE) {
+                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE) {
   
   # set the seed so that data is scrambled the same way every time, no matter the model
   set.seed(seed)
@@ -2276,61 +2281,175 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
   variances = c()
   cols = rainbow(nFold)
   plot(dr1$Lon, dr1$Lat, main="CV split", xlab="Lon", ylab="Lat", type="n")
-  for(k in 1:nFold) {
-    # print progress
-    print(paste0("iteration ", k, "/", nFold))
-    
-    # set train and test datasets
-    startI = startIs[k]
-    endI = endIs[k]
-    if(!bySite) {
-      testDat = eventDat[startI:endI,]
-      trainDat = eventDat[-(startI:endI),]
+  if(!inPar) {
+    for(k in 1:nFold) {
+      # print progress
+      print(paste0("iteration ", k, "/", nFold))
+      
+      # set train and test datasets
+      startI = startIs[k]
+      endI = endIs[k]
+      if(!bySite) {
+        testDat = eventDat[startI:endI,]
+        trainDat = eventDat[-(startI:endI),]
+      }
+      else {
+        site = sites[k]
+        testDat = eventDat[eventDat$Site == site,]
+        trainDat = eventDat[eventDat$Site != site,]
+      }
+      # add test dat to plot
+      text(testDat$Lon, testDat$Lat, col=cols[k], labels=as.character(k))
+      
+      # set G for predicting at training data locations
+      if(!bySite)
+        thisG = GEvent[-(startI:endI),]
+      else
+        thisG = GEvent[eventDat$Site != site,]
+      
+      # generate simulations from prediction areal zeta field
+      preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
+                                   normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
+                                   normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
+                                   gpsDat=gpsDat)
+      zetaSims = preds$resultTab$zeta
+      
+      # make sure all prediction simulations have the same format
+      if(!normalModel)
+        zetaSims = t(zetaSims)
+      
+      # get resulting subsidence predictions
+      if(!bySite)
+        GPred = GEvent[startI:endI,]
+      else
+        GPred = matrix(GEvent[eventDat$Site == site,], ncol=ncol(G))
+      GTPred = sweep(GPred, 2, tvec, "*")
+      subPreds = GTPred %*% zetaSims
+      
+      # compute MSE
+      yTest = -testDat$subsidence
+      errs = sweep(subPreds, 1, yTest, "-")
+      mse = mean(errs^2)
+      
+      MSEs[k] = mse
+      biases[k] = mean(errs)
+      variances[k] = mean(apply(errs, 1, var))
+      
+      print(paste0("iteration MSE: ", mse))
     }
-    else {
-      site = sites[k]
-      testDat = eventDat[eventDat$Site == site,]
-      trainDat = eventDat[eventDat$Site != site,]
+  }
+  else {
+    # in this case we do things in parallel
+    
+    # first plot the CV partition
+    for(i in 1:nFold) {
+      # set train and test datasets
+      startI = startIs[i]
+      endI = endIs[i]
+      if(!bySite) {
+        testDat = eventDat[startI:endI,]
+        trainDat = eventDat[-(startI:endI),]
+      }
+      else {
+        site = sites[i]
+        testDat = eventDat[eventDat$Site == site,]
+        trainDat = eventDat[eventDat$Site != site,]
+      }
+      
+      # add test dat to plot
+      text(testDat$Lon, testDat$Lat, col=cols[i], labels=as.character(i))
     }
-    # add test dat to plot
-    text(testDat$Lon, testDat$Lat, col=cols[k], labels=as.character(k))
     
-    # set G for predicting at training data locations
-    if(!bySite)
-      thisG = GEvent[-(startI:endI),]
-    else
-      thisG = GEvent[eventDat$Site != site,]
+    #setup parallel backend to use many processors
+    cores=detectCores()
+    cl <- makeCluster(cores[1]-1) #not to overload your computer
+    registerDoParallel(cl)
     
-    # generate simulations from prediction areal zeta field
-    preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
-                                 tvec, priorMaxSlip, normalModel, posNormalModel)
-    zetaSims = preds$resultTab$zeta
+    writeLines(c(""), "log.txt")
     
-    # make sure all prediction simulations have the same format
-    if(!normalModel)
-      zetaSims = t(zetaSims)
+    # now in parallel compute the CV MSE, bias, and variance
+    results = foreach(i= 1:nFold, .combine=cbind, .verbose=TRUE) %dopar% {
+      setwd("~/git/M9/")
+      
+      # write output to the log.txt file
+      sink("log.txt", append=TRUE)
+      
+      # first source everything
+      library(fields)
+      source("taper.R")
+      source('predictions.R')
+      source('fitModel.R')
+      source('plotSubfault.R')
+      source("loadFloodDat.R")
+      source("exploratoryAnalysisFuns.R") # -418.9, 319
+      source("splines.R")
+      
+      
+      # print progress
+      print(paste0("iteration ", i, "/", nFold))
+      
+      # set train and test datasets
+      startI = startIs[i]
+      endI = endIs[i]
+      if(!bySite) {
+        testDat = eventDat[startI:endI,]
+        trainDat = eventDat[-(startI:endI),]
+      }
+      else {
+        site = sites[i]
+        testDat = eventDat[eventDat$Site == site,]
+        trainDat = eventDat[eventDat$Site != site,]
+      }
+      
+      # set G for predicting at training data locations
+      if(!bySite)
+        thisG = GEvent[-(startI:endI),]
+      else
+        thisG = GEvent[eventDat$Site != site,]
+      
+      # generate simulations from prediction areal zeta field
+      preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
+                                   normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
+                                   normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
+                                   gpsDat=gpsDat)
+      zetaSims = preds$resultTab$zeta
+      
+      # make sure all prediction simulations have the same format
+      if(!normalModel)
+        zetaSims = t(zetaSims)
+      
+      # get resulting subsidence predictions
+      if(!bySite)
+        GPred = GEvent[startI:endI,]
+      else
+        GPred = matrix(GEvent[eventDat$Site == site,], ncol=ncol(G))
+      GTPred = sweep(GPred, 2, tvec, "*")
+      subPreds = GTPred %*% zetaSims
+      
+      # compute MSE
+      yTest = -testDat$subsidence
+      errs = sweep(subPreds, 1, yTest, "-")
+      mse = mean(errs^2)
+      
+      MSEs[i] = mse
+      biases[i] = mean(errs)
+      variances[i] = mean(apply(errs, 1, var))
+      
+      print(paste0("iteration MSE: ", mse))
+      
+      return(c(mse, mean(errs), mean(apply(errs, 1, var))))
+    }
+    MSEs = results[1,]
+    biases = results[2,]
+    variances = results[3,]
     
-    # get resulting subsidence predictions
-    if(!bySite)
-      GPred = GEvent[startI:endI,]
-    else
-      GPred = matrix(GEvent[eventDat$Site == site,], ncol=ncol(G))
-    GTPred = sweep(GPred, 2, tvec, "*")
-    subPreds = GTPred %*% zetaSims
-    
-    # compute MSE
-    yTest = -testDat$subsidence
-    errs = sweep(subPreds, 1, yTest, "-")
-    mse = mean(errs^2)
-    
-    MSEs[k] = mse
-    biases[k] = mean(errs)
-    variances[k] = mean(apply(errs, 1, var))
-    
-    print(paste0("iteration MSE: ", mse))
+    #stop cluster
+    stopCluster(cl)
   }
   
-  return(list(MSE=mean(MSEs), bias=mean(biases), variance=mean(variances), MSEs=MSEs, biases=biases, variances=variances))
+  return(list(MSE=mean(MSEs), bias=mean(biases), variance=mean(variances), MSEs=MSEs, 
+              biases=biases, variances=variances, nFold=nFold, nObs=nrow(eventDat), 
+              weight=sum(1/eventDat$Uncertainty^2)))
 }
 
 

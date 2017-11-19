@@ -30,10 +30,8 @@ library(gstat)
 library(sp)
 library(maptools)
 library(gridExtra)
-
-
-load("fixedFit_MVN.RData")
-MLEs = fixedFitMVN$MLEs
+library(foreach)
+library(doParallel)
 
 # precompute G
 nx = 300

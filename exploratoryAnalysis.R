@@ -5330,7 +5330,7 @@ sigmaTest = covMatCSZ[1:n,1:n]
 system.time(out <- mtmvnorm(mean=meanTest, sigma=sigmaTest, lower=rep(0, n), doComputeVariance = FALSE))
 mean(out$tmean)
 
-getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=muZeta) {
+getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=mean(muZeta)) {
   sigmaTest = covMatCSZ[1:n,1:n]
   
   newMu = newMuInit
@@ -5339,7 +5339,7 @@ getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=muZeta) {
     meanTest = rep(newMu, n)
     out <- mtmvnorm(mean=meanTest, sigma=sigmaTest, lower=rep(0, n), doComputeVariance = FALSE)
     adjustedMu = mean(out$tmean)
-    muDiff = adjustedMu - muZeta
+    muDiff = adjustedMu - mean(muZeta)
     newMu = newMu - muDiff
     
     print(paste0("muDiff: ", muDiff, "; newMu: ", newMu))
@@ -5350,7 +5350,7 @@ getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=muZeta) {
 getPosNormMu = function(muZeta, covMatCSZ, startN=20) {
   n = startN
   maxN = nrow(covMatCSZ)
-  newMu = muZeta
+  newMu = mean(muZeta)
   
   while(n < maxN) {
     newMu = getPosNormMuN(muZeta, covMatCSZ, n, newMuInit=newMu)
@@ -5364,6 +5364,91 @@ getPosNormMu = function(muZeta, covMatCSZ, startN=20) {
   
   newMu
 }
+
+
+#####
+# compare adjusted mu predictive distribution to the normal predictive distribution and 
+# the normal predictive distribution that's been adjusted
+# subset data to only be T1 data (and the Okada matrix)
+isT1 = events=="T1"
+T1Dat = inflateDr1[isT1,]
+GT1 = G[isT1, ]
+
+### combined model
+params = fitComb$MLEs
+muZeta = params[2]
+sigmaZeta = params[3]
+tvec = fitComb$tvec
+
+# compute predictive distribution mean vector and covariance matrix
+normalPreds = predsGivenSubsidence(params, fault=csz, subDat=T1Dat, niter=2, G=GT1, prior=FALSE, tvec=tvec, 
+                                   normalModel=TRUE, posNormalModel=FALSE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
+                                   dStar=dStar, gpsDat=threshSlipDat)
+arealCSZCor = normalPreds$zetaVarMat
+muAreal = normalPreds$zetaEsts
+
+# compute adjusted mean parameter
+# NOTE: this doesn't work, why not?
+# adjustedMu = getPosNormMu(muAreal, arealCSZCov, startN=nrow(csz), initNewMu=6)
+# tempPar = params
+# tempPar[2] = adjustedMu
+# save(adjustedMu, file="adjustedMuCombPred.RData")
+
+# recompute predictions
+load("adjustedMuComb.RData")
+tempPar = params
+tempPar[2] = adjustedMu
+normalPreds = predsGivenSubsidence(tempPar, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
+                                   normalModel=TRUE, posNormalModel=TRUE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
+                                   dStar=dStar, gpsDat=threshSlipDat)
+
+# areal values of zeta
+muAreal = normalPreds$zetaEsts * tvec
+sdAreal = normalPreds$zetaSD * tvec
+medAreal = normalPreds$zetaMed * tvec
+l95Areal = normalPreds$zeta025 * tvec
+u95Areal = normalPreds$zeta975 * tvec
+
+# get simulations
+tab <- normalPreds$predResults
+zetaSims = tab$zeta
+slipSims = sweep(zetaSims, 1, tvec, "*")
+slipPreds = list(meanSlip=muAreal, slipSims=slipSims)
+
+subPreds = predsToSubsidence(tempPar, slipPreds, csz, useMVNApprox = FALSE, G=GT1, 
+                             subDat=T1Dat, normalModel=TRUE, tvec=tvec, normalizeTaper=TRUE, 
+                             dStar=dStar)
+
+# plot results:
+ggComparePredsToSubs(tempPar, slipPreds=slipPreds, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1PNAdjustedMu"), 
+                     fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE)
+
+ggComparePredsToSubs(params, slipPreds=slipPreds, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1PNUnadjustedMu"), 
+                     fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE)
+
+ggComparePredsToSubs(params, slipPreds=slipPreds, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1N"), 
+                     fault=csz, normalModel=TRUE, posNormalModel=FALSE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE)
+
+##### compare site subsidence means to each observation
+siteWeights = 1/inflateDr1$Uncertainty^2
+siteTotWeight = aggregate(siteWeights, list(Site=inflateDr1$Site), sum)
+siteWeightedSum = aggregate(siteWeights*inflateDr1$subsidence, list(Site=inflateDr1$Site), sum)
+siteMeans = siteWeightedSum$x/siteTotWeight$x
+siteLons = aggregate(siteWeights*inflateDr1$Lon, list(Site=inflateDr1$Site), sum)$x/siteTotWeight$x
+siteLats = aggregate(siteWeights*inflateDr1$Lat, list(Site=inflateDr1$Site), sum)$x/siteTotWeight$x
+plot(inflateDr1$subsidence, inflateDr1$Lat, cex=.3, col="blue", pch=19)
+points(siteMeans, siteLats, cex=1, col="green", pch=19)
+
+plot(siteMeans, siteLats, cex=1, col="green", pch=19, xlim=range(inflateDr1$subsidence))
+points(inflateDr1$subsidence, inflateDr1$Lat, cex=.3, col="blue", pch=19)
+
+cbind(as.character(siteWeightedSum$Site), siteLons, siteLats)
 
 
 
