@@ -84,6 +84,9 @@ load("adjustedMuSub.RData")
 load("adjustedMuGPS.RData")
 
 ### perform CV for positive normal models (unadjusted):
+# let's only include full-margin earthquakes with >=20 observations
+allEvents = c("T1", "T2", "T3", "T4", "T5", "T6", "T7")
+
 # for combined taper model:
 params = fitComb$MLEs
 tvec = fitComb$tvec
