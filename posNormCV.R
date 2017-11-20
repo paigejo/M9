@@ -346,8 +346,8 @@ weightSub = matrix(NA, nrow=1, ncol=length(allEvents))
 for(ev in 1:length(allEvents)) {
   thisEvent = allEvents[ev]
   print(paste0("Performing CV for event ", ev)) # 244 sec for parallel, # 457 sec for sequential (~2x speedup)
-  print(system.time(out <- doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
-                                   tvec, NULL, TRUE, FALSE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)))
+  out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
+                tvec, NULL, TRUE, FALSE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
   MSEsSub[ev] = out$MSE
   biasesSub[ev] = out$bias
   nObsSub[ev] = out$nObs
@@ -397,8 +397,8 @@ weightCombPN = matrix(NA, nrow=1, ncol=length(allEvents))
 for(ev in 1:length(allEvents)) {
   thisEvent = allEvents[ev]
   print(paste0("Performing CV for event ", ev))
-  out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
-                tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
+  print(system.time(out <- doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
+                    tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=FALSE, fastPNSim=FALSE)))
   MSEsCombPN[ev] = out$MSE
   biasesCombPN[ev] = out$bias
   nObsCombPN[ev] = out$nObs

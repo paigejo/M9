@@ -1023,7 +1023,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
                                 tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], 
                                            normalize=normalizeTaper, dStar=dStar), priorMaxSlip=NA, 
                                 normalModel=FALSE, posNormalModel=FALSE, taperedGPSDat=FALSE, 
-                                gpsDat=slipDatCSZ) {
+                                gpsDat=slipDatCSZ, fastPNSim=TRUE) {
   if(posNormalModel && !normalModel)
     stop("normalModel must be set to TRUE if posNormalModel is set to TRUE")
   
@@ -1159,9 +1159,27 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
           print(paste0("number of simulations remaining: ", nNewSims))
         }
         
-        zSims = matrix(rnorm(nNewSims*nrow(Lc)), nrow=nrow(Lc), ncol=nNewSims)
-        thisZetaSims = sweep(Lc %*% zSims, 1, muc, "+") # add muZeta to each zero mean simulation
-        zetaSims[,negCols] = thisZetaSims
+        if(! fastPNSim) {
+          # simulate only for remaining columns
+          zSims = matrix(rnorm(nNewSims*nrow(Lc)), nrow=nrow(Lc), ncol=nNewSims)
+          thisZetaSims = sweep(Lc %*% zSims, 1, muc, "+") # add muZeta to each zero mean simulation
+          zetaSims[,negCols] = thisZetaSims
+        }
+        else {
+          # simulate a bunch and take any sims that are positive
+          zSims = matrix(rnorm(niter*2*nrow(Lc)), nrow=nrow(Lc), ncol=niter*2)
+          thisZetaSims = sweep(Lc %*% zSims, 1, muc, "+") # add muZeta to each zero mean simulation
+          thisPosCols = which(!apply(thisZetaSims, 2, negCol))
+          
+          if(length(thisPosCols) > nNewSims) {
+            zetaSims[,negCols] = thisZetaSims[,thisPosCols[1:nNewSims]]
+          }
+          else {
+            negColsI = which(negCols)
+            zetaSims[,negColsI[1:length(thisPosCols)]] = thisZetaSims[,thisPosCols]
+          }
+          
+        }
         
         notAllPos =  any(zetaSims < 0) && posNormalModel
       }
@@ -2253,7 +2271,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
                   G=NULL, prior=FALSE, normalizeTaper=FALSE, dStar=28000, 
                   tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], normalize=normalizeTaper), 
                   priorMaxSlip=NA, normalModel=FALSE, posNormalModel=FALSE, nFold=20, seed=123, 
-                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE) {
+                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE, fastPNSim=FALSE) {
   
   # set the seed so that data is scrambled the same way every time, no matter the model
   set.seed(seed)
@@ -2310,11 +2328,11 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
       else
         thisG = GEvent[eventDat$Site != site,]
       
-      # generate simulations from prediction areal zeta field
-      preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
-                                   normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
-                                   normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
-                                   gpsDat=gpsDat)
+      # generate simulations from prediction areal zeta field fastPNSim: 951.112, else: 1207.864
+      system.time(preds <- predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
+                                                normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
+                                                normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
+                                                gpsDat=gpsDat, fastPNSim=FALSE))
       zetaSims = preds$resultTab$zeta
       
       # make sure all prediction simulations have the same format
