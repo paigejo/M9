@@ -1174,7 +1174,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
           if(length(thisPosCols) > nNewSims) {
             zetaSims[,negCols] = thisZetaSims[,thisPosCols[1:nNewSims]]
           }
-          else {
+          else if(length(thisPosCols) > 0) {
             negColsI = which(negCols)
             zetaSims[,negColsI[1:length(thisPosCols)]] = thisZetaSims[,thisPosCols]
           }
@@ -2329,10 +2329,10 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
         thisG = GEvent[eventDat$Site != site,]
       
       # generate simulations from prediction areal zeta field fastPNSim: 951.112, else: 1207.864
-      system.time(preds <- predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
-                                                normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
-                                                normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
-                                                gpsDat=gpsDat, fastPNSim=FALSE))
+      preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
+                                   normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
+                                   normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
+                                   gpsDat=gpsDat, fastPNSim=fastPNSim)
       zetaSims = preds$resultTab$zeta
       
       # make sure all prediction simulations have the same format
@@ -2432,7 +2432,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
       preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
                                    normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
                                    normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
-                                   gpsDat=gpsDat)
+                                   gpsDat=gpsDat, fastPNSim=fastPNSim)
       zetaSims = preds$resultTab$zeta
       
       # make sure all prediction simulations have the same format
