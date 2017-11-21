@@ -2271,7 +2271,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
                   G=NULL, prior=FALSE, normalizeTaper=FALSE, dStar=28000, 
                   tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], normalize=normalizeTaper), 
                   priorMaxSlip=NA, normalModel=FALSE, posNormalModel=FALSE, nFold=20, seed=123, 
-                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE, fastPNSim=FALSE) {
+                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE, fastPNSim=TRUE) {
   
   # set the seed so that data is scrambled the same way every time, no matter the model
   set.seed(seed)
