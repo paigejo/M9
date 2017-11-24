@@ -436,84 +436,84 @@ allEvents = c("T1", "T2", "T3", "T4", "T5", "T6", "T7")
 # biasesSubPN[length(allEvents)+1] = sum(biasesSubPN[1:length(allEvents)]*weightSubPN)/sum(weightSubPN)
 # save(MSEsSubPN, biasesSubPN, nObsSubPN, weightSubPN, file="predictiveSubPNCV.RData")
 # load("predictiveSubPNCV.RData")
-
-# for GPS/locking taper model:
-params = fitGPS$MLEs
-tvec = fitGPS$tvec
-MSEsGPSPN = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-biasesGPSPN = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-nObsGPSPN = matrix(NA, nrow=1, ncol=length(allEvents))
-weightGPSPN = matrix(NA, nrow=1, ncol=length(allEvents))
-for(ev in 1:length(allEvents)) {
-  thisEvent = allEvents[ev]
-  print(paste0("Performing CV for event ", ev))
-  out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
-                tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
-  MSEsGPSPN[ev] = out$MSE
-  biasesGPSPN[ev] = out$bias
-  nObsGPSPN[ev] = out$nObs
-  weightGPSPN[ev] = out$weight
-  
-  print(paste0("Event MSE: ", out$MSE))
-  print(paste0("Event bias: ", out$bias))
-}
-MSEsGPSPN[length(allEvents)+1] = sum(MSEsGPSPN[1:length(allEvents)]*weightGPSPN)/sum(weightGPSPN)
-biasesGPSPN[length(allEvents)+1] = sum(biasesGPSPN[1:length(allEvents)]*weightGPSPN)/sum(weightGPSPN)
-save(MSEsGPSPN, biasesGPSPN, nObsGPSPN, weightGPSPN, file="predictiveGPSPNCV.RData")
-load("predictiveGPSPNCV.RData")
-
-### Now do the same thing but for positive normal models (unadjusted):
-# for combined taper model:
-params = fitComb$MLEs
-tvec = fitComb$tvec
-params[2] = adjustedMuComb
-MSEsCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-biasesCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-nObsCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
-weightCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
-for(ev in 1:length(allEvents)) {
-  thisEvent = allEvents[ev]
-  print(paste0("Performing CV for event ", ev))
-  out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
-                tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
-  MSEsCombPNAdj[ev] = out$MSE
-  biasesCombPNAdj[ev] = out$bias
-  nObsCombPNAdj[ev] = out$nObs
-  weightCombPNAdj[ev] = out$weight
-  
-  print(paste0("Event MSE: ", out$MSE))
-  print(paste0("Event bias: ", out$bias))
-}
-MSEsCombPNAdj[length(allEvents)+1] = sum(MSEsCombPNAdj[1:length(allEvents)]*weightCombPNAdj)/sum(weightCombPNAdj)
-biasesCombPNAdj[length(allEvents)+1] = sum(biasesCombPNAdj[1:length(allEvents)]*weightCombPNAdj)/sum(weightCombPNAdj)
-save(MSEsCombPNAdj, biasesCombPNAdj, nObsCombPNAdj, weightCombPNAdj, file="predictiveCombPNAdjCV.RData")
-load("predictiveCombPNAdjCV.RData")
-
-# for subsidence taper model:
-params = fitGPS$MLEs
-params[2] = adjustedMuSub
-tvec = fitGPS$tvec
-MSEsSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-biasesSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-nObsSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
-weightSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
-for(ev in 1:length(allEvents)) {
-  thisEvent = allEvents[ev]
-  print(paste0("Performing CV for event ", ev))
-  out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
-                tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
-  MSEsSubPNAdj[ev] = out$MSE
-  biasesSubPNAdj[ev] = out$bias
-  nObsSubPNAdj[ev] = out$nObs
-  weightSubPNAdj[ev] = out$weight
-  
-  print(paste0("Event MSE: ", out$MSE))
-  print(paste0("Event bias: ", out$bias))
-}
-MSEsSubPNAdj[length(allEvents)+1] = sum(MSEsSubPNAdj[1:length(allEvents)]*weightSubPNAdj)/sum(weightSubPNAdj)
-biasesSubPNAdj[length(allEvents)+1] = sum(biasesSubPNAdj[1:length(allEvents)]*weightSubPNAdj)/sum(weightSubPNAdj)
-save(MSEsSubPNAdj, biasesSubPNAdj, nObsSubPNAdj, weightSubPNAdj, file="predictiveSubPNAdjCV.RData")
-load("predictiveSubPNAdjCV.RData")
+# 
+# # for GPS/locking taper model:
+# params = fitGPS$MLEs
+# tvec = fitGPS$tvec
+# MSEsGPSPN = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+# biasesGPSPN = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+# nObsGPSPN = matrix(NA, nrow=1, ncol=length(allEvents))
+# weightGPSPN = matrix(NA, nrow=1, ncol=length(allEvents))
+# for(ev in 1:length(allEvents)) {
+#   thisEvent = allEvents[ev]
+#   print(paste0("Performing CV for event ", ev))
+#   out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
+#                 tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
+#   MSEsGPSPN[ev] = out$MSE
+#   biasesGPSPN[ev] = out$bias
+#   nObsGPSPN[ev] = out$nObs
+#   weightGPSPN[ev] = out$weight
+#   
+#   print(paste0("Event MSE: ", out$MSE))
+#   print(paste0("Event bias: ", out$bias))
+# }
+# MSEsGPSPN[length(allEvents)+1] = sum(MSEsGPSPN[1:length(allEvents)]*weightGPSPN)/sum(weightGPSPN)
+# biasesGPSPN[length(allEvents)+1] = sum(biasesGPSPN[1:length(allEvents)]*weightGPSPN)/sum(weightGPSPN)
+# save(MSEsGPSPN, biasesGPSPN, nObsGPSPN, weightGPSPN, file="predictiveGPSPNCV.RData")
+# load("predictiveGPSPNCV.RData")
+# 
+# ### Now do the same thing but for positive normal models (unadjusted):
+# # for combined taper model:
+# params = fitComb$MLEs
+# tvec = fitComb$tvec
+# params[2] = adjustedMuComb
+# MSEsCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+# biasesCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+# nObsCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
+# weightCombPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
+# for(ev in 1:length(allEvents)) {
+#   thisEvent = allEvents[ev]
+#   print(paste0("Performing CV for event ", ev))
+#   out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
+#                 tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
+#   MSEsCombPNAdj[ev] = out$MSE
+#   biasesCombPNAdj[ev] = out$bias
+#   nObsCombPNAdj[ev] = out$nObs
+#   weightCombPNAdj[ev] = out$weight
+#   
+#   print(paste0("Event MSE: ", out$MSE))
+#   print(paste0("Event bias: ", out$bias))
+# }
+# MSEsCombPNAdj[length(allEvents)+1] = sum(MSEsCombPNAdj[1:length(allEvents)]*weightCombPNAdj)/sum(weightCombPNAdj)
+# biasesCombPNAdj[length(allEvents)+1] = sum(biasesCombPNAdj[1:length(allEvents)]*weightCombPNAdj)/sum(weightCombPNAdj)
+# save(MSEsCombPNAdj, biasesCombPNAdj, nObsCombPNAdj, weightCombPNAdj, file="predictiveCombPNAdjCV.RData")
+# load("predictiveCombPNAdjCV.RData")
+# 
+# # for subsidence taper model:
+# params = fitGPS$MLEs
+# params[2] = adjustedMuSub
+# tvec = fitGPS$tvec
+# MSEsSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+# biasesSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+# nObsSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
+# weightSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
+# for(ev in 1:length(allEvents)) {
+#   thisEvent = allEvents[ev]
+#   print(paste0("Performing CV for event ", ev))
+#   out = doCVSub(params, params[2], csz, inflateDr1, thisEvent, 10000, G, FALSE, TRUE, dStar, 
+#                 tvec, NULL, TRUE, TRUE, NULL, 123, TRUE, TRUE, threshSlipDat, inPar=TRUE)
+#   MSEsSubPNAdj[ev] = out$MSE
+#   biasesSubPNAdj[ev] = out$bias
+#   nObsSubPNAdj[ev] = out$nObs
+#   weightSubPNAdj[ev] = out$weight
+#   
+#   print(paste0("Event MSE: ", out$MSE))
+#   print(paste0("Event bias: ", out$bias))
+# }
+# MSEsSubPNAdj[length(allEvents)+1] = sum(MSEsSubPNAdj[1:length(allEvents)]*weightSubPNAdj)/sum(weightSubPNAdj)
+# biasesSubPNAdj[length(allEvents)+1] = sum(biasesSubPNAdj[1:length(allEvents)]*weightSubPNAdj)/sum(weightSubPNAdj)
+# save(MSEsSubPNAdj, biasesSubPNAdj, nObsSubPNAdj, weightSubPNAdj, file="predictiveSubPNAdjCV.RData")
+# load("predictiveSubPNAdjCV.RData")
 
 # for GPS/locking taper model:
 params = fitGPS$MLEs
