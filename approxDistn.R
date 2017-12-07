@@ -432,7 +432,7 @@ getArealCorMat = function(fault=csz, params=NULL, normalModel=FALSE) {
 # NOTE: this fit might take a while
 
 getPosNormMu = function(muZeta, covMatCSZ, startN=20, initNewMu=mean(muZeta)) {
-  require(mvtnorm)
+  require(tmvtnorm)
   n = startN
   maxN = nrow(covMatCSZ)
   newMu = initNewMu

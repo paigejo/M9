@@ -5450,5 +5450,58 @@ points(inflateDr1$subsidence, inflateDr1$Lat, cex=.3, col="blue", pch=19)
 
 cbind(as.character(siteWeightedSum$Site), siteLons, siteLats)
 
+##### test adjusted mean
 
+simMeanPN = function(params, covMat, nsim=5000, G=NULL, tvec=NULL) {
+  mu = params[2]
+  mu = rep(mu, nrow(covMat))
+  L = t(chol(covMat))
+  zetaSims = sweep(L %*% matrix(rnorm(nrow(covMat)*nsim), ncol=nsim), 1, mu, "+")
+  allPos = function(xs) { all(xs > 0) }
+  posCols = apply(zetaSims, 2, allPos)
+  zetaSims = zetaSims[,posCols]
+  
+  if(is.null(G)) {
+    G = diag(nrow=nrow(zetaSims))
+  }
+  if(is.null(tvec)) {
+    tvec = rep(1, nrow(zetaSims))
+  }
+  finalSims = G %*% sweep(zetaSims, 1, tvec, "*")
+  means = apply(finalSims, 1, mean)
+  sds= apply(finalSims, 1, sd)
+  n=ncol(finalSims)
+  list(n=n, means=means, mean=mean(means), sds=sds, 
+       lows = means - qnorm(.975)*sds/sqrt(n), highs = means + qnorm(.975)*sds/sqrt(n))
+}
 
+# get the parameters (with adjusted mean)
+params = fitComb$MLEs
+params2= params
+normalMean = params[2]
+params2[2] = adjustedMuComb
+sigmaZeta = params[3]
+tvec = fitComb$tvec
+
+# compute covariance matrix
+arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
+                             theta=params[length(params)], smoothness=3/2, 
+                             Distance="rdist.earth", Dist.args=list(miles=FALSE))
+arealCSZCov = arealCSZCor * sigmaZeta^2
+
+# get means of the slip field
+out = simMeanPN(params, arealCSZCov, 20000, G=NULL, tvec=NULL)
+out2 = simMeanPN(params2, arealCSZCov, 20000, G=NULL, tvec=NULL)
+out$mean
+out2$mean
+normalMean
+
+# get mean of normal subsidence field
+muVec =  G %*% (rep(normalMean, length(tvec)) * tvec)
+
+# get means of subsidence field
+out = simMeanPN(params, arealCSZCov, 20000, G=G, tvec=tvec)
+out2 = simMeanPN(params2, arealCSZCov, 20000, G=G, tvec=tvec)
+out$mean
+out2$mean
+mean(muVec)
