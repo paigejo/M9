@@ -257,7 +257,7 @@ load("marginalSubCV.RData")
 # for subsidence taper model:
 params = fitSub$MLEs
 params[2] = adjustedMuSub
-tvec = fitGPS$tvec
+tvec = fitSub$tvec
 MSEsSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
 biasesSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
 nObsSubPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
@@ -280,31 +280,31 @@ biasesSubPNAdj[length(allEvents)+1] = sum(biasesSubPNAdj[1:length(allEvents)]*we
 save(MSEsSubPNAdj, biasesSubPNAdj, nObsSubPNAdj, weightSubPNAdj, file="marginalSubPNAdjCV.RData")
 load("marginalSubPNAdjCV.RData")
 
-# # for GPS/locking taper model:
-# params = fitGPS$MLEs
-# params[2] = adjustedMuGPS
-# tvec = fitGPS$tvec
-# MSEsGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-# biasesGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
-# nObsGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
-# weightGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
-# for(ev in 1:length(allEvents)) {
-#   thisEvent = allEvents[ev]
-#   print(paste0("Performing CV for event ", ev))
-#   out = getEventMSE(params, csz, inflateDr1, thisEvent, 20000, G, NULL, TRUE, TRUE, 123,
-#                     TRUE, tvec, dStar, TRUE, threshSlipDat)
-#   MSEsGPSPNAdj[ev] = out$MSE
-#   biasesGPSPNAdj[ev] = out$bias
-#   nObsGPSPNAdj[ev] = out$nObs
-#   weightGPSPNAdj[ev] = out$weight
-# 
-#   print(paste0("Event MSE: ", out$MSE))
-#   print(paste0("Event bias: ", out$bias))
-# }
-# MSEsGPSPNAdj[length(allEvents)+1] = sum(MSEsGPSPNAdj[1:length(allEvents)]*weightGPSPNAdj)/sum(weightGPSPNAdj)
-# biasesGPSPNAdj[length(allEvents)+1] = sum(biasesGPSPNAdj[1:length(allEvents)]*weightGPSPNAdj)/sum(weightGPSPNAdj)
-# save(MSEsGPSPNAdj, biasesGPSPNAdj, nObsGPSPNAdj, weightGPSPNAdj, file="marginalGPSPNAdjCV.RData")
-# load("marginalGPSPNAdjCV.RData")
+# for GPS/locking taper model:
+params = fitGPS$MLEs
+params[2] = adjustedMuGPS
+tvec = fitGPS$tvec
+MSEsGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+biasesGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents)+1)
+nObsGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
+weightGPSPNAdj = matrix(NA, nrow=1, ncol=length(allEvents))
+for(ev in 1:length(allEvents)) {
+  thisEvent = allEvents[ev]
+  print(paste0("Performing CV for event ", ev))
+  out = getEventMSE(params, csz, inflateDr1, thisEvent, 20000, G, NULL, TRUE, TRUE, 123,
+                    TRUE, tvec, dStar, TRUE, threshSlipDat)
+  MSEsGPSPNAdj[ev] = out$MSE
+  biasesGPSPNAdj[ev] = out$bias
+  nObsGPSPNAdj[ev] = out$nObs
+  weightGPSPNAdj[ev] = out$weight
+
+  print(paste0("Event MSE: ", out$MSE))
+  print(paste0("Event bias: ", out$bias))
+}
+MSEsGPSPNAdj[length(allEvents)+1] = sum(MSEsGPSPNAdj[1:length(allEvents)]*weightGPSPNAdj)/sum(weightGPSPNAdj)
+biasesGPSPNAdj[length(allEvents)+1] = sum(biasesGPSPNAdj[1:length(allEvents)]*weightGPSPNAdj)/sum(weightGPSPNAdj)
+save(MSEsGPSPNAdj, biasesGPSPNAdj, nObsGPSPNAdj, weightGPSPNAdj, file="marginalGPSPNAdjCV.RData")
+load("marginalGPSPNAdjCV.RData")
 
 ##### do Predictive dist'n Cross-Validation by site:
 ##### [(Predictive Normal, Predictive Pos. Normal, Predictive Pos. Normal Adjusted) x (Comb, Sub, GPS)] x (T1, T2, ..., AVG)
