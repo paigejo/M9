@@ -1,0 +1,12 @@
+
+Surface-nitrogen concentrations in Chesapeake Bay
+----------------------------------------------------------------------
+
+A spatial dataset of 49 measurements of the surface-nitrogen
+concentration (in mg/l) taken in May 1995 throughout the Chesapeake
+Bay. This dataset was used in De Oliveira and Ecker (2002) for hotspot
+detection.
+
+
+
+

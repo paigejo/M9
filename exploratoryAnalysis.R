@@ -5505,3 +5505,137 @@ out2 = simMeanPN(params2, arealCSZCov, 20000, G=G, tvec=tvec)
 out$mean
 out2$mean
 mean(muVec)
+
+
+
+
+
+
+
+
+##### 
+##### 
+##### 
+##### 
+##### 
+##### 
+# this section forward was written after the paper reviews
+
+##### plot along strike, and along dip distances
+# do it for the fault
+out = compute_subfault_distances(csz)
+euclidDist = out$D
+strikeDist = out$Dstrike
+dipDist = out$Ddip
+
+ggPlotFaultDat(csz, plotVar = strikeDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="Along-Strike Distance")
+ggPlotFaultDat(csz, plotVar = dipDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="Along-Dip Distance")
+
+# do it for the gps data
+out = compute_dip_strike_distance_gps(slipDatCSZ, csz)
+euclidDist = out$D
+strikeDist = out$Dstrike
+dipDist = out$Ddip
+
+ggplotGpsData(slipDatCSZ, plotVar = strikeDist[500,], lonLim=lonRange, latLim=latRange, clab="km", 
+               main="Along-Strike Distance")
+ggplotGpsData(slipDatCSZ, plotVar = dipDist[500,], lonLim=lonRange, latLim=latRange, clab="km", 
+               main="Along-Dip Distance")
+
+##### unfolding the full geometry
+testFault = faultGeom
+testFault = rotateFault(testFault, 2)
+ggPlotFaultDat(testFault, plotData=FALSE)
+
+testFault = straightenFault(faultGeom)
+ggPlotFaultDat(testFault, plotData=FALSE)
+
+ggPlotFaultDat(faultGeom, plotData=FALSE)
+ggPlotFaultDat(csz, plotData=FALSE)
+plot(faultGeom$longitude, faultGeom$latitude)
+plot(fault$longitude, fault$latitude)
+rdist(cbind(fault[firstOff:nrow(fault),]$longitude, fault[firstOff:nrow(fault),]$latitude))
+pts = getFaultCenters(fault[firstOff:nrow(fault),], type="corners")[,1:2]
+rdist(pts)
+
+faultGeomStraight = straightenFault2(faultGeom)
+cszStraight = divideFault2(faultGeomStraight)
+cszStraight$centerX = 0.5 * (cszStraight$topLeftX + cszStraight$topRightX)
+cszStraight$centerY = 0.5 * (cszStraight$topLeftY + cszStraight$bottomRightY)
+ggPlotFaultDat(faultGeom, plotData=FALSE)
+ggPlotFaultDat(faultGeomStraight, plotData=FALSE, projection="rectangular", xName="topLeftX", yName="topLeftY", parameters=parameters, 
+               xlim=NULL, ylim=NULL)
+ggPlotFaultDat(cszStraight, plotData=FALSE, projection="rectangular", xName="topLeftX", yName="topLeftY", parameters=parameters, 
+               xlim=NULL, ylim=NULL)
+
+# straighten fault by putting it on a grid
+faultGeomStraight = straightenFault3()
+cszStraight = divideFault2(faultGeomStraight)
+cszStraight$centerX = 0.5 * (cszStraight$topLeftX + cszStraight$topRightX)
+cszStraight$centerY = 0.5 * (cszStraight$topLeftY + cszStraight$bottomRightY)
+# can't plot this last geometry, since the projection is arbitrary and won't line up with the map
+ggPlotFaultDat(faultGeom, plotData=FALSE)
+ggPlotFaultDat(faultGeomStraight, plotData=FALSE, projection="rectangular", xName="topLeftX", yName="topLeftY", parameters=parameters,
+               xlim=NULL, ylim=NULL)
+ggPlotFaultDat(cszStraight, plotData=FALSE, projection="rectangular", xName="topLeftX", yName="topLeftY", parameters=parameters,
+               xlim=NULL, ylim=NULL)
+
+# convert from new coordinate system to kilometers
+topI = 13
+bottomI = 1
+originalDist = rdist.earth(faultGeom[c(topI, bottomI), 2:3], miles=FALSE)[1, 2]
+newDist = rdist(cbind(c(faultGeomStraight$topMiddleX[topI], faultGeomStraight$topMiddleX[bottomI]), 
+                      c(faultGeomStraight$topMiddleY[topI], faultGeomStraight$topMiddleY[bottomI])))[1, 2]
+kmPerUnit = originalDist / newDist
+
+# calculate along strike and along dip distances in kilometers
+strikeCoords = cbind(0, cszStraight$centerY)
+dipCoords = cbind(cszStraight$centerX, 0)
+newStrikeDist = rdist(strikeCoords) * kmPerUnit
+newDipDist = rdist(dipCoords) * kmPerUnit
+ggPlotFaultDat(csz, plotVar = newStrikeDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="New Along-Strike Distance")
+ggPlotFaultDat(csz, plotVar = newDipDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="New Along-Dip Distance")
+
+# compute old along dip and strike distances for the fault
+out = compute_subfault_distances(csz)
+euclidDist = out$D
+strikeDist = out$Dstrike
+dipDist = out$Ddip
+
+ggPlotFaultDat(csz, plotVar = strikeDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="Old Along-Strike Distance")
+ggPlotFaultDat(csz, plotVar = dipDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="Old Along-Dip Distance")
+
+# do it for the gps data
+out = compute_dip_strike_distance_gps(slipDatCSZ, csz)
+euclidDist = out$D
+strikeDist = out$Dstrike
+dipDist = out$Ddip
+
+ggplotGpsData(slipDatCSZ, plotVar = strikeDist[500,], xlim=lonRange, ylim=latRange, clab="km", 
+              main="Old Along-Strike Distance")
+ggplotGpsData(slipDatCSZ, plotVar = dipDist[500,], xlim=lonRange, ylim=latRange, clab="km", 
+              main="Old Along-Dip Distance")
+
+# calculate new dip and strike coordinates for the gps data
+newGpsCoords = calcStraightGpsCoords(faultGeomStraight, faultGeom)
+slipDatStraight = slipDatCSZ
+slipDatStraight$x = newGpsCoords[,1]
+slipDatStraight$y = newGpsCoords[,2]
+
+# calculate new dip and strike distances for the gps data
+strikeCoords = cbind(0, slipDatStraight$y)
+dipCoords = cbind(slipDatStraight$x, 0)
+newStrikeDist = rdist(strikeCoords) * kmPerUnit
+newDipDist = rdist(dipCoords) * kmPerUnit
+
+# plot those distances
+ggplotGpsData(slipDatStraight, plotVar = newStrikeDist[500,], xlim=NULL, ylim=NULL, clab="km", 
+              main="Old Along-Strike Distance", projection="rectangular", xName="x", yName="y")
+ggplotGpsData(slipDatStraight, plotVar = newDipDist[500,], xlim=NULL, ylim=NULL, clab="km", 
+              main="Old Along-Dip Distance", projection="rectangular", xName="x", yName="y")

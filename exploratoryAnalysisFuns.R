@@ -1024,7 +1024,7 @@ ggComparePredsToSubs = function(params, slipPreds=NULL, slipPredsGPS=NULL, subPr
                                 logScale=FALSE, fault=csz, latRange=c(40, 50), 
                                 posNormalModel=FALSE, normalModel=posNormalModel, doGPSPred=FALSE, 
                                 useMVNApprox=FALSE, taperedGPSDat=FALSE, dStar=28000, normalizeTaper=FALSE, 
-                                noTitle=FALSE, lwd=.5) {
+                                noTitle=FALSE, lwd=.5, magLimits=c(8.6, 9.4)) {
   # get parameters
   if(is.null(muVec)) {
     lambdaMLE = params[1]
@@ -1120,32 +1120,44 @@ ggComparePredsToSubs = function(params, slipPreds=NULL, slipPredsGPS=NULL, subPr
             xlim=lonRange, ylim=latRange, clab="", lwd=lwd) + geom_point(aes(x=Lon, y=Lat, col="red"), shape=3, data=subDat)
   
   # simulated subsidence data from Okada model using marginal distribution
-  subRange = range(c(-meanSub, -l95Noise, -u95Noise, subDat$subsidence))
+  # subRange = range(c(-meanSub, -l95Noise, -u95Noise, subDat$subsidence))
   ord = order(subDat$Lat)
   ordDat = subDat[ord,]
   ordL95 = l95Noise[ord]
   ordU95 = u95Noise[ord]
-  tmp = cbind(ordDat, ordL95, ordU95)
-  pl3 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col="red"), shape=3, data=tmp) + 
-    coord_fixed(xlim=subRange, ylim=latRange, expand=FALSE) + 
-    labs(x="Subsidence (m)", y="Latitude") + geom_path(aes(x=-ordL95, y=Lat), col="blue", data=tmp) +
-    geom_path(aes(x=-ordU95, y=Lat), col="blue", data=tmp) + guides(col=FALSE) + 
-    ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
+  ordLat = subDat$Lat[ord]
+  ordMeanSub = subPreds$meanSub[ord]
+  # tmp = cbind(ordDat, ordL95, ordU95)
+  # pl3 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col="red"), shape=3, data=tmp) + 
+  #   coord_fixed(xlim=subRange, ylim=latRange, expand=FALSE) + 
+  #   labs(x="Subsidence (m)", y="Latitude") + geom_path(aes(x=-ordL95, y=Lat), col="blue", data=tmp) +
+  #   geom_path(aes(x=-ordU95, y=Lat), col="blue", data=tmp) + guides(col=FALSE) + 
+  #   ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
+  #   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+  #         panel.grid.minor = element_blank(), 
+  #         panel.background = element_rect(fill='white'))
+  tmp = data.frame(meanSub=ordMeanSub, Lat=ordLat)
+  pl3 = ggplot() + geom_point(aes(x=subsidence, y=Lat), col="red", shape=3, size=.3, data=ordDat) + 
+    geom_point(aes(x=-meanSub, y=Lat), col="blue", shape=19, size=.3, data=tmp) + 
+    ggtitle(paste0(plotNameRoot, "Subsidence Predictions")) + 
+    scale_y_continuous("Latitude", limits=latRange) + 
     theme(panel.border = element_blank(), panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(), 
-          panel.background = element_rect(fill='white'))
+          panel.background = element_rect(fill='white')) + labs(x="Subsidence (m)", y="Latitude") + guides(shape=FALSE, fill=FALSE)
   
   # plot magnitude distribution
   mags = apply(slipPreds$slipSims, 2, getMomentFromSlip, fault=fault, dStar=dStar, normalizeTaper=normalizeTaper)
   cleanMags = mags[is.finite(mags)]
-  pl4 = qplot(cleanMags) + labs(x="Magnitudes", y="Frequency") + 
+  tmp = data.frame(cleanMags=cleanMags)
+  pl4 = ggplot(tmp) + geom_histogram(aes(cleanMags, y=..density..)) + labs(x="Magnitudes", y="Density") + 
     geom_vline(col="purple", xintercept=quantile(cleanMags, probs=.975), linetype=2) + 
     geom_vline(col="purple", xintercept=quantile(cleanMags, probs=.025), linetype=2) + 
     geom_vline(col="purple", xintercept=mean(cleanMags)) + 
     ggtitle(paste0(plotNameRoot, "Histogram of earthquake magnitudes")) + 
     theme(panel.border = element_blank(), panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(), 
-          panel.background = element_rect(fill='white'))
+          panel.background = element_rect(fill='white')) + 
+    scale_x_continuous(limits=magLimits)
   
   if(noTitle) {
     pl1 = pl1 + ggtitle(NULL)
@@ -1542,12 +1554,17 @@ ggCompareModels = function(modelFitList,
                            posNormalModelVec=rep(FALSE, length(modelFitList)), 
                            normalModelVec=rep(TRUE, length(modelFitList)), 
                            useMVNApprox=FALSE, noTitle=TRUE, taperedGPSDat=TRUE, 
-                           magRange=NULL, lwd=.5) {
+                           magRange=NULL, lwd=.5, magTicks=NULL, plotSubPreds=FALSE, 
+                           subPredMeanRange=c(-2,2), adjustedMeans=NULL, 
+                           varRange=NULL) {
   
   plots = list()
   for(i in 1:length(modelFitList)) {
     fit = modelFitList[[i]]
     params = fit$MLEs
+    if(!is.null(adjustedMeans)) {
+      params[2] = adjustedMeans[i]
+    }
     normalModel = normalModelVec[i]
     posNormalModel = posNormalModelVec[i]
     tvec = fit$tvec
@@ -1621,11 +1638,11 @@ ggCompareModels = function(modelFitList,
     # slip mean
     if(!logScale) {
       pl1 = ggPlotFaultDat(fault, plotVar=meanSlip, main=paste0(plotNameRoot, "Mean Slip (m)"), 
-                           xlim=lonRange, ylim=latRange, clab="", lwd=lwd) + geom_point(aes(x=Lon, y=Lat, col="red"), shape=3, data=subDat)
+                           xlim=lonRange, ylim=latRange, clab="", lwd=lwd, varRange=varRange) + geom_point(aes(x=Lon, y=Lat, col="red"), shape=3, data=subDat)
     }
     else {
       pl1 = ggPlotFaultDat(fault, plotVar=meanSlip, main=paste0(plotNameRoot, "Mean Slip (m)"), 
-                           xlim=lonRange, ylim=latRange, logScale=TRUE, clab="", lwd=lwd) + geom_point(aes(x=Lon, y=Lat, col="red"), shape=3, data=subDat)
+                           xlim=lonRange, ylim=latRange, logScale=TRUE, clab="", lwd=lwd, varRange=varRange) + geom_point(aes(x=Lon, y=Lat, col="red"), shape=3, data=subDat)
     }
     plots = c(plots, list(pl1))
     
@@ -1635,6 +1652,8 @@ ggCompareModels = function(modelFitList,
     ordDat = subDat[ord,]
     ordL95 = l95Noise[ord]
     ordU95 = u95Noise[ord]
+    ordMeanSub = meanSub[ord]
+    ordLat = subDat$Lat[ord]
     # tmp = cbind(ordDat, ordL95, ordU95)
     # pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col="red"), shape=3, data=tmp) + 
     #   scale_y_continuous("Latitude", limits=latRange) + 
@@ -1644,24 +1663,38 @@ ggCompareModels = function(modelFitList,
     #   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
     #         panel.grid.minor = element_blank(), 
     #         panel.background = element_rect(fill='white'))
-    allShapes = rep(19, length(normResids))
-    allShapes[outOfBounds] = 18
-    allShapes = allShapes[ord]
-    normResids = normResids[ord]
-    aboveBounds = subQuant[ord] > .975
-    belowBounds = subQuant[ord] < .025
-    outOfBounds = outOfBounds[ord]
-    tmp = cbind(ordDat, ordL95, ordU95, normResids, outOfBounds, aboveBounds, belowBounds)
-    pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col=normResids, fill=normResids), shape=19, size=.3, data=tmp[!outOfBounds,]) + 
-      geom_point(aes(x=subsidence, y=Lat), shape=17, col="purple", size=.5, data=tmp[aboveBounds,], inherit.aes=FALSE) +
-      geom_point(aes(x=subsidence, y=Lat), shape=17, col="green", size=.5, data=tmp[belowBounds,], inherit.aes=FALSE) +
-      scale_y_continuous("Latitude", limits=latRange) + 
-      labs(x="Subsidence (m)", y="Latitude") + guides(shape=FALSE, fill=FALSE) + 
-      scale_color_distiller("", palette = "RdBu", direction=-1, limits=c(-qnorm(.975), qnorm(.975))) + 
-      ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
-      theme(panel.border = element_blank(), panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(), 
-            panel.background = element_rect(fill='white'))
+    
+    if(!plotSubPreds) {
+      allShapes = rep(19, length(normResids))
+      allShapes[outOfBounds] = 18
+      allShapes = allShapes[ord]
+      normResids = normResids[ord]
+      aboveBounds = subQuant[ord] > .975
+      belowBounds = subQuant[ord] < .025
+      outOfBounds = outOfBounds[ord]
+      tmp = cbind(ordDat, ordL95, ordU95, normResids, outOfBounds, aboveBounds, belowBounds)
+      pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat, col=normResids, fill=normResids), shape=19, size=.3, data=tmp[!outOfBounds,]) + 
+        geom_point(aes(x=subsidence, y=Lat), shape=17, col="purple", size=.5, data=tmp[aboveBounds,], inherit.aes=FALSE) +
+        geom_point(aes(x=subsidence, y=Lat), shape=17, col="green", size=.5, data=tmp[belowBounds,], inherit.aes=FALSE) +
+        scale_y_continuous("Latitude", limits=latRange) + 
+        labs(x="Subsidence (m)", y="Latitude") + guides(shape=FALSE, fill=FALSE) + 
+        scale_color_distiller("Z-Score", palette = "RdBu", direction=-1, limits=c(-qnorm(.975), qnorm(.975))) + 
+        ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
+        theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(), 
+              panel.background = element_rect(fill='white'))
+    }
+    else {
+      tmp = data.frame(meanSub=ordMeanSub, Lat=ordLat)
+      pl2 = ggplot() + geom_point(aes(x=subsidence, y=Lat), col="red", shape=3, size=.3, data=ordDat) + 
+        geom_point(aes(x=-meanSub, y=Lat), col="blue", shape=19, size=.3, data=tmp) + 
+        ggtitle(paste0(plotNameRoot, "95% Prediction Band")) + 
+        scale_y_continuous("Latitude", limits=latRange) + 
+        theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(), 
+              panel.background = element_rect(fill='white')) + labs(x="Subsidence (m)", y="Latitude") + guides(shape=FALSE, fill=FALSE) +
+        scale_x_continuous(limits=subPredMeanRange)
+    }
     # geom_point(aes(x=subsidence, y=Lat, fill=normResids), shape=17, col="black", size=.3, data=tmp[outOfBounds,], inherit.aes=FALSE) +
     # scale_shape_manual(values=c(19, 17)) + 
     plots = c(plots, list(pl2))
@@ -1669,10 +1702,11 @@ ggCompareModels = function(modelFitList,
     
     # plot magnitude distribution
     mags = apply(slipPreds$slipSims, 2, getMomentFromSlip, fault=fault, dStar=dStar, normalizeTaper=normalizeTaper)
-    cleanMags = mags[is.finite(mags)]
+    cleanMags = mags[is.finite(mags) & mags != 0]
     if(is.null(magRange))
       magRange=range(cleanMags)
-    pl3 = qplot(cleanMags, xlim=magRange) + labs(x="Magnitudes", y="Frequency") + 
+    tmp = data.frame(cleanMags=cleanMags)
+    pl3 = ggplot(tmp) + geom_histogram(aes(cleanMags, y=..density..)) + labs(x="Magnitudes", y="Density") + 
       geom_vline(col="purple", xintercept=quantile(cleanMags, probs=.975), linetype=2) + 
       geom_vline(col="purple", xintercept=quantile(cleanMags, probs=.025), linetype=2) + 
       geom_vline(col="purple", xintercept=mean(cleanMags)) + 
@@ -1680,6 +1714,18 @@ ggCompareModels = function(modelFitList,
       theme(panel.border = element_blank(), panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(), 
             panel.background = element_rect(fill='white'))
+    # pl3 = qplot(cleanMags, xlim=magRange) + labs(x="Magnitudes", y="Frequency") + 
+    #   geom_vline(col="purple", xintercept=quantile(cleanMags, probs=.975), linetype=2) + 
+    #   geom_vline(col="purple", xintercept=quantile(cleanMags, probs=.025), linetype=2) + 
+    #   geom_vline(col="purple", xintercept=mean(cleanMags)) + 
+    #   ggtitle(paste0(plotNameRoot, "Histogram of earthquake magnitudes")) + 
+    #   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+    #         panel.grid.minor = element_blank(), 
+    #         panel.background = element_rect(fill='white'))
+    
+    if(!is.null(magTicks))
+      pl3 = pl3 + scale_x_continuous(limits=magRange, breaks=magTicks)
+    
     plots = c(plots, list(pl3))
   }
   

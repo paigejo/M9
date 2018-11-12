@@ -1,0 +1,131 @@
+\begin{thebibliography}{16}
+\newcommand{\enquote}[1]{``#1''}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\providecommand{\urlprefix}{URL }
+\providecommand{\bibAnnoteFile}[1]{%
+  \IfFileExists{#1}{\begin{quotation}\noindent\textsc{Key:} #1\\
+  \textsc{Annotation:}\ \input{#1}\end{quotation}}{}}
+\providecommand{\bibAnnote}[2]{%
+  \begin{quotation}\noindent\textsc{Key:} #1\\
+  \textsc{Annotation:}\ #2\end{quotation}}
+
+\bibitem[{Evans et~al.(2015)Evans, Loveless, and Meade}]{evans2015}
+Evans, Eileen~L, John~P Loveless, and Brendan~J Meade (2015), \enquote{Total
+  variation regularization of geodetically and geologically constrained block
+  models for the {W}estern {U}nited {S}tates.} \emph{Geophys. J. Int.}, 202,
+  713--727.
+\bibAnnoteFile{evans2015}
+
+\bibitem[{Gelfand et~al.(2010)Gelfand, Diggle, Guttorp, and Fuentes}]{handbook}
+Gelfand, Alan~E, Peter Diggle, Peter Guttorp, and Montserrat Fuentes (2010),
+  \emph{Handbook of spatial statistics}. CRC press.
+\bibAnnoteFile{handbook}
+
+\bibitem[{Goldfinger et~al.(2012)Goldfinger, Nelson, Morey, Johnson, Patton,
+  Karabanov, Gutierrez-Pastor, Eriksson, Gracia, Dunhill
+  et~al.}]{goldfinger2012}
+Goldfinger, Chris, C~Hans Nelson, Ann~E Morey, Joel~E Johnson, Jason~R Patton,
+  Eugene Karabanov, Julia Gutierrez-Pastor, Andrew~T Eriksson, Eulalia Gracia,
+  Gita Dunhill, et~al. (2012), \enquote{Turbidite event history: Methods and
+  implications for {H}olocene paleoseismicity of the {C}ascadia subduction
+  zone.} \emph{{US} Geol. Survey Professional Paper}, 1661, 170.
+\bibAnnoteFile{goldfinger2012}
+
+\bibitem[{Krige(1951)}]{kriging}
+Krige, Daniel~G (1951), \enquote{A statistical approach to some basic mine
+  valuation problems on the {W}itwatersrand.} \emph{Journal of the {S}outhern
+  {A}frican Institute of Mining and Metallurgy}, 52, 119--139.
+\bibAnnoteFile{kriging}
+
+\bibitem[{Lavall{\'e}e et~al.(2006)Lavall{\'e}e, Liu, and
+  Archuleta}]{lavallee2006}
+Lavall{\'e}e, Daniel, Pengcheng Liu, and Ralph~J Archuleta (2006),
+  \enquote{Stochastic model of heterogeneity in earthquake slip spatial
+  distributions.} \emph{Geophys. J. Int.}, 165, 622--640.
+\bibAnnoteFile{lavallee2006}
+
+\bibitem[{Leonard et~al.(2010)Leonard, Currie, Mazzotti, and
+  Hyndman}]{leonard2010}
+Leonard, Lucinda~J, Claire~A Currie, St{\'e}phane Mazzotti, and Roy~D Hyndman
+  (2010), \enquote{Rupture area and displacement of past {C}ascadia great
+  earthquakes from coastal coseismic subsidence.} \emph{Geol. Soc. Am. Bull.},
+  122, 2079--2096.
+\bibAnnoteFile{leonard2010}
+
+\bibitem[{LeVeque et~al.(2016)LeVeque, Waagan, Gonz{\'a}lez, Rim, and
+  Lin}]{leveque2016}
+LeVeque, Randall~J, Knut Waagan, Frank~I Gonz{\'a}lez, Donsub Rim, and Guang
+  Lin (2016), \enquote{Generating random earthquake events for probabilistic
+  tsunami hazard assessment.} \emph{Pure and Applied Geophysics}, 173,
+  3671--3692.
+\bibAnnoteFile{leveque2016}
+
+\bibitem[{Mai and Beroza(2002)}]{mai2002}
+Mai, P~Martin and Gregory~C Beroza (2002), \enquote{A spatial random field
+  model to characterize complexity in earthquake slip.} \emph{Journal of
+  Geophysical Research: Solid Earth}, 107.
+\bibAnnoteFile{mai2002}
+
+\bibitem[{McCaffrey et~al.(2013)McCaffrey, King, Payne, and
+  Lancaster}]{mccaffrey2013}
+McCaffrey, Robert, Robert~W King, Suzette~J Payne, and Matthew Lancaster
+  (2013), \enquote{Active tectonics of northwestern {US} inferred from
+  {GPS}-derived surface velocities.} \emph{Journal of Geophysical Research:
+  Solid Earth}, 118, 709--723.
+\bibAnnoteFile{mccaffrey2013}
+
+\bibitem[{Melgar et~al.(2016)Melgar, LeVeque, Dreger, and Allen}]{melgar2016}
+Melgar, Diego, Randall~J LeVeque, Douglas~S Dreger, and Richard~M Allen (2016),
+  \enquote{Kinematic rupture scenarios and synthetic displacement data: An
+  example application to the {C}ascadia {S}ubduction {Z}one.} \emph{J. Geophys.
+  Res-Sol. Ea.}, 121, 6658--6674.
+\bibAnnoteFile{melgar2016}
+
+\bibitem[{Okada(1985)}]{okada}
+Okada, Yoshimitsu (1985), \enquote{Surface deformation due to shear and tensile
+  faults in a half-space.} \emph{Bulletin of the seismological society of
+  {A}merica}, 75, 1135--1154.
+\bibAnnoteFile{okada}
+
+\bibitem[{Pollitz et~al.(2010)Pollitz, McCrory, Wilson, Svarc, Puskas, and
+  Smith}]{faultGeom}
+Pollitz, FF, Patricia McCrory, Doug Wilson, Jerry Svarc, Christine Puskas, and
+  Robert~B Smith (2010), \enquote{Viscoelastic-cycle model of interseismic
+  deformation in the northwestern {U}nited {S}tates.} \emph{Geophys. J. Int.},
+  181, 665--696.
+\bibAnnoteFile{faultGeom}
+
+\bibitem[{Wang et~al.(2012)Wang, Hu, and He}]{wang2012}
+Wang, Kelin, Yan Hu, and Jiangheng He (2012), \enquote{Deformation cycles of
+  subduction earthquakes in a viscoelastic {E}arth.} \emph{Nature}, 484, 327.
+\bibAnnoteFile{wang2012}
+
+\bibitem[{Wang et~al.(2013)Wang, Engelhart, Wang, Hawkes, Horton, Nelson, and
+  Witter}]{wang2013}
+Wang, Pei-Ling, Simon~E Engelhart, Kelin Wang, Andrea~D Hawkes, Benjamin~P
+  Horton, Alan~R Nelson, and Robert~C Witter (2013), \enquote{Heterogeneous
+  rupture in the great {C}ascadia earthquake of 1700 inferred from coastal
+  subsidence estimates.} \emph{Journal of Geophysical Research: Solid Earth},
+  118, 2460--2473.
+\bibAnnoteFile{wang2013}
+
+\bibitem[{Witter et~al.(2011)Witter, Zhang, Wang, Priest, Goldfinger, Stimely,
+  English, and Ferro}]{Witter2011}
+Witter, Robert~C, Yinglong Zhang, Kelin Wang, George~R Priest, Chris
+  Goldfinger, Laura~L Stimely, John~T English, and Paul~A Ferro (2011),
+  \enquote{Simulating tsunami inundation at {B}andon, {C}oos {County},
+  {Oregon}, using hypothetical {C}ascadia and {A}laska earthquake scenarios.}
+  \emph{Oregon Dept. Geol. and Mineral Industries Spec. Paper}, 43, 57.
+\bibAnnoteFile{Witter2011}
+
+\bibitem[{Witter et~al.(2013)Witter, Zhang, Wang, Priest, Goldfinger, Stimely,
+  English, and Ferro}]{Witter2013}
+Witter, Robert~C, Yinglong~J Zhang, Kelin Wang, George~R Priest, Chris
+  Goldfinger, Laura Stimely, John~T English, and Paul~A Ferro (2013),
+  \enquote{Simulated tsunami inundation for a range of {C}ascadia megathrust
+  earthquake scenarios at {B}andon, {O}regon, {USA}.} \emph{Geosphere}, 9,
+  1783--1803.
+\bibAnnoteFile{Witter2013}
+
+\end{thebibliography}

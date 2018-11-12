@@ -1,0 +1,43 @@
+library(fields)
+library(rstan)
+library(mapproj)
+library(corpcor) # for fast computation of pseudoinverse
+setwd("~/git/M9/")
+source("taper.R")
+source("okada.R")
+source('predictions.R')
+source('plotSubfault.R')
+source('loadTestData.r')
+source('fitModel.R')
+source("loadFloodDat.R") # loads the data
+source("test.R")
+source("exploratoryAnalysisFuns.R") # -418.9, 319
+source("splines.R")
+source("priors.R")
+source("myMLESpatialProcess.R")
+source("fitModel2.R")
+library(splines)
+library(abind)
+library(numDeriv)
+library(VGAM)
+library(ggmap)
+library(ggplot2)
+library(scales)
+library(RColorBrewer)
+library(latex2exp)
+library(maps)
+library(mapdata)
+library(gstat)
+library(sp)
+library(maptools)
+library(gridExtra)
+library(foreach)
+library(doParallel)
+
+# precompute G
+nx = 300
+ny=  900
+lonGrid = seq(lonRange[1], lonRange[2], l=nx)
+latGrid = seq(latRange[1], latRange[2], l=ny)
+G = okadaAll(csz, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=0.25)
+fauxG = getFauxG()

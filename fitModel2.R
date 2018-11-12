@@ -4,7 +4,7 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                      G=NULL, fauxG=NULL, subDat=dr1, fault=csz, nKnots=5, normalizeTaper=TRUE, 
                      dStar=21000, useGrad=FALSE, maxit=500, latRange=c(40, 50), 
                      normalModel=FALSE, doHess=TRUE, corGPS=FALSE, finalFit=FALSE, 
-                     diffGPSTaper=FALSE, nKnotsGPS=nKnots, reltol=1e-8) {
+                     diffGPSTaper=FALSE, nKnotsGPS=nKnots, reltol=1e-8, anisotropic=FALSE) {
   
   ##### Set up initial parameter guesses for the MLE optimization if necessary
   # variance of a lognormal (x) is (exp(sigma^2) - 1) * exp(2mu + sigma^2)
@@ -31,8 +31,14 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                                                 nKnotsVar=nKnots, normalizeTaper=normalizeTaper, dStar=dStar, 
                                                 normalModel=normalModel, useGrad=useGrad, fault=fault, 
                                                 latRange=latRange, G=G, subDat=subDat)$betaHat
-    
     initParams = c(muZetaInit, sigmaZetaInit, initSplineParams)
+    
+    # initialize with isotropic model even if we want to fit an anisotropic model eventually
+    if(anisotropic) {
+      initParams = c(muZetaInit, sigmaZetaInit, initSplineParams, 1)
+    }
+    
+    initParams
   }
   
   # set spatial correlation smoothness
@@ -67,8 +73,57 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
   ##### compute distance matrices for fault and for gps data
   coordsGPS = cbind(gpsDat$lon, gpsDat$lat)
   coordsCSZ = cbind(fault$longitude, fault$latitude)
-  distMatGPS = rdist.earth(coordsGPS, miles=FALSE)
-  distMatCSZ = rdist.earth(coordsCSZ, miles=FALSE)
+  if(!anisotropic) {
+    distMatGPS = rdist.earth(coordsGPS, miles=FALSE)
+    distMatCSZ = rdist.earth(coordsCSZ, miles=FALSE)
+    squareStrikeDistCsz = NULL
+    squareDipDistCsz = NULL
+    squareStrikeDistGps = NULL
+    squareDipDistGps = NULL
+  } else {
+    distMatGPS = NULL
+    distMatCSZ = NULL
+    
+    # the below code has bin commented out because the resulting covariances are not positive semi-definite
+    # ## under anisotropic model, we compute the along strike and along dip distances separately
+    # # fault geometry distances
+    # out = compute_subfault_distances(csz)
+    # squareStrikeDistCsz = out$Dstrike^2
+    # squareDipDistCsz = out$Ddip^2
+    # 
+    # # gps data distances
+    # out = compute_dip_strike_distance_gps(slipDatCSZ, csz)
+    # squareStrikeDistGps = out$Dstrike^2
+    # squareDipDistGps = out$Ddip^2
+    
+    ## under anisotropic model, we compute the along strike and along dip distances separately
+    # straighten fault and gps geometries
+    faultGeomStraight = straightenFault3()
+    cszStraight = divideFault2(faultGeomStraight)
+    cszStraight$centerX = 0.5 * (cszStraight$topLeftX + cszStraight$topRightX)
+    cszStraight$centerY = 0.5 * (cszStraight$topLeftY + cszStraight$bottomRightY)
+    straightenedGpsCoords = calcStraightGpsCoords(faultGeomStraight, faultGeom, gpsDat)
+    
+    # convert from new, straightened coordinate system to kilometers
+    topI = 13
+    bottomI = 1
+    originalDist = rdist.earth(faultGeom[c(topI, bottomI), 2:3], miles=FALSE)[1, 2]
+    newDist = rdist(cbind(c(faultGeomStraight$topMiddleX[topI], faultGeomStraight$topMiddleX[bottomI]), 
+                          c(faultGeomStraight$topMiddleY[topI], faultGeomStraight$topMiddleY[bottomI])))[1, 2]
+    kmPerUnit = originalDist / newDist
+    
+    # calculate along strike and along dip squared distances in kilometers
+    strikeCoords = cbind(0, cszStraight$centerY)
+    dipCoords = cbind(cszStraight$centerX, 0)
+    squareStrikeDistCsz = (rdist(strikeCoords) * kmPerUnit)^2
+    squareDipDistCsz = (rdist(dipCoords) * kmPerUnit)^2
+    
+    # do the same for the gps data
+    strikeCoords = cbind(0, straightenedGpsCoords[,2])
+    dipCoords = cbind(straightenedGpsCoords[,1], 0)
+    squareStrikeDistGps = (rdist(strikeCoords) * kmPerUnit)^2
+    squareDipDistGps = (rdist(dipCoords) * kmPerUnit)^2
+  }
   
   ##### Do optimization
   optimTable <<- NULL # table to save likelihood optimization steps
@@ -79,9 +134,11 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
       reltol=1e-8
   }
   if(normalizeTaper)
-    controls = list(fnscale = -1, reltol=reltol, parscale=c(2, 2, rep(1, length(initParams)-3), 25), maxit=maxit)
+    controls = list(fnscale = -1, reltol=reltol, parscale=c(2, 2, rep(1, length(initParams)-3-anisotropic), 25), maxit=maxit)
   else
-    controls = list(fnscale = -1, reltol=reltol, parscale=c(2, 2, rep(1/21000, length(initParams)-3), 25), maxit=maxit)
+    controls = list(fnscale = -1, reltol=reltol, parscale=c(2, 2, rep(1/21000, length(initParams)-3-anisotropic), 25), maxit=maxit)
+  if(anisotropic)
+    controls$parscale = c(controls$parscale, 2)
   
   if(finalFit) {
     controls$parscale = controls$parscale/25
@@ -113,6 +170,11 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
   corGPSIn = corGPS
   diffGPSTaperIn = diffGPSTaper
   nKnotsGPSIn = nKnotsGPS
+  anisotropicIn = anisotropic
+  squareStrikeDistCszIn = squareStrikeDistCsz
+  squareDipDistCszIn = squareDipDistCsz
+  squareStrikeDistGpsIn = squareStrikeDistGps
+  squareDipDistGpsIn = squareDipDistGps
   if(!useGrad)
     opt = optim(initParams, fixedDataLogLik, control=controls, hessian=FALSE, 
                 cszDepths=cszDepthsIn, corMatGPS=corMatGPSIn, corMatCSZL=corMatCSZLIn, 
@@ -122,7 +184,10 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                 useSubPrior=useSubPriorIn, useSlipPrior=useSlipPriorIn, fauxG=fauxGIn, 
                 constrLambda=constrLambdaIn, latRange=latRangeIn, normalModel=normalModelIn, 
                 taperedGPSDat=taperedGPSDatIn, distMatGPS=distMatGPSIn, distMatCSZ=distMatCSZIn, 
-                corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn)
+                corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn, 
+                anisotropic=anisotropicIn, squareStrikeDistCsz=squareStrikeDistCszIn, 
+                squareDipDistCsz=squareDipDistCszIn, squareStrikeDistGps=squareStrikeDistGpsIn, 
+                squareDipDistGps=squareDipDistGpsIn)
   else {
     lats=seq(latRange[1], latRange[2], l=100)
     Xi = getSplineBasis(latRange=latRange, nKnots=nKnots, lats=lats)
@@ -132,6 +197,8 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
     }
     else
       uiIn = cbind(0,0,-Xi, 0)
+    if(anisotropic)
+      uiIn = cbind(uiIn, 0)
     opt = constrOptim(initParams, fixedDataLogLik, fixedDataLogLikGrad, control=controls, hessian=FALSE, 
                 cszDepths=cszDepthsIn, corMatGPS=corMatGPSIn, corMatCSZL=corMatCSZLIn, 
                 gpsDat=gpsDatIn, nKnots=nKnotsIn, 
@@ -141,6 +208,9 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                 constrLambda=constrLambdaIn, latRange=latRangeIn, normalModel=normalModelIn, 
                 taperedGPSDat=taperedGPSDatIn, distMatGPS=distMatGPSIn, distMatCSZ=distMatCSZIn, 
                 corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn, 
+                anisotropic=anisotropicIn, squareStrikeDistCsz=squareStrikeDistCszIn, 
+                squareDipDistCsz=squareDipDistCszIn, squareStrikeDistGps=squareStrikeDistGpsIn, 
+                squareDipDistGps=squareDipDistGpsIn, 
                 method="BFGS", ui=uiIn, ci=rep(-10, 100))
     # use BFGS! (constraint makes lambdas not be able to be bigger than 10.  Somehow that works...)
   }
@@ -156,7 +226,14 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
   if(length(opt$par) > 3 || (nKnots==1)) {
     splinePar = opt$par[(length(opt$par)-(nKnots-1)-1):(length(opt$par) - 1)]
   }
-  phiMLE = opt$par[length(opt$par)]
+  if(!anisotropic) {
+    phiMLE = opt$par[length(opt$par)]
+    alphaMLE = NA
+  }
+  else {
+    phiMLE = opt$par[length(opt$par) - 1]
+    alphaMLE = opt$par[length(opt$par)]
+  }
   logLikMLE = opt$value
   if(doHess) {
     hess.args = list(eps=1e-7, d=0.0001, zero.tol=sqrt(.Machine$double.eps/7e-7), r=6, v=2, show.details=FALSE)
@@ -168,7 +245,10 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                    useSubPrior=useSubPriorIn, useSlipPrior=useSlipPriorIn, fauxG=fauxGIn, 
                    constrLambda=constrLambdaIn, latRange=latRangeIn, normalModel=normalModelIn, 
                    taperedGPSDat=taperedGPSDatIn, distMatGPS=distMatGPSIn, distMatCSZ=distMatCSZIn, 
-                   corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn)
+                   corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn, 
+                   anisotropic=anisotropicIn, squareStrikeDistCsz=squareStrikeDistCszIn, 
+                   squareDipDistCsz=squareDipDistCszIn, squareStrikeDistGps=squareStrikeDistGpsIn, 
+                   squareDipDistGps=squareDipDistGpsIn)
     # hess = opt$hessian
   }
   else {
@@ -184,7 +264,10 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                                   useSubPrior=useSubPriorIn, useSlipPrior=useSlipPriorIn, fauxG=fauxGIn, 
                                   constrLambda=constrLambdaIn, latRange=latRangeIn, normalModel=normalModelIn, 
                                   taperedGPSDat=taperedGPSDatIn, distMatGPS=distMatGPSIn, distMatCSZ=distMatCSZIn, 
-                                  corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn)
+                                  corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn, 
+                                  anisotropic=anisotropicIn, squareStrikeDistCsz=squareStrikeDistCszIn, 
+                                  squareDipDistCsz=squareDipDistCszIn, squareStrikeDistGps=squareStrikeDistGpsIn, 
+                                  squareDipDistGps=squareDipDistGpsIn)
   else
     optGrad = jacobian(fixedDataLogLik, opt$par, cszDepths=cszDepthsIn, corMatGPS=corMatGPSIn, corMatCSZL=corMatCSZLIn, 
                        gpsDat=gpsDatIn, nKnots=nKnotsIn, 
@@ -193,7 +276,10 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
                        useSubPrior=useSubPriorIn, useSlipPrior=useSlipPriorIn, fauxG=fauxGIn, 
                        constrLambda=constrLambdaIn, latRange=latRangeIn, normalModel=normalModelIn, 
                        taperedGPSDat=taperedGPSDatIn, distMatGPS=distMatGPSIn, distMatCSZ=distMatCSZIn, 
-                       corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn)
+                       corGPS=corGPSIn, diffGPSTaper=diffGPSTaperIn, nKnotsGPS=nKnotsGPSIn, 
+                       anisotropic=anisotropicIn, squareStrikeDistCsz=squareStrikeDistCszIn, 
+                       squareDipDistCsz=squareDipDistCszIn, squareStrikeDistGps=squareStrikeDistGpsIn, 
+                       squareDipDistGps=squareDipDistGpsIn)
   
   # compute spline basis matrix for subsidence data
   Xi = getSplineBasis(fault, nKnots=nKnots, latRange=latRange)
@@ -229,22 +315,54 @@ fitModel2 = function(initParams=NULL, useMVNApprox=FALSE, gpsDat=slipDatCSZ,
   # params is in order: lambda, muZeta, sigmaZeta, lambda0, gamma, splineParams, phi
   MLEs = c(NA, opt$par[1:2], 0.25, gammaEst, opt$par[-c(1:2)])
   
+  # compute final anisotropy distances if necessary
+  if(anisotropic) {
+    strikeDistGps = (1 / alphaMLE) * sqrt(squareStrikeDistGps)
+    dipDistGps = alphaMLE * sqrt(squareDipDistGps)
+    strikeDistCsz = (1 / alphaMLE) * sqrt(squareStrikeDistCsz)
+    dipDistCsz = alphaMLE * sqrt(squareDipDistCsz)
+  } else {
+    strikeDistGps = NULL
+    dipDistGps = NULL
+    strikeDistCsz = NULL
+    dipDistCsz = NULL
+  }
+  
   # Return results
   return(list(MLEs=MLEs, muZetaMLE=muZetaMLE, sigmaZetaMLE=sigmaZetaMLE, lambdaMLE=NA, 
-              gammaEst=gammaEst, logLikMLE=logLikMLE, splineParMLE=splinePar, phiMLE=phiMLE, hess=hess, optimTable=optimTable, 
-              tvec=tvec, tvecGPS=tvecGPS, optPar=opt$par, optGrad=optGrad))
+              gammaEst=gammaEst, logLikMLE=logLikMLE, splineParMLE=splinePar, phiMLE=phiMLE, 
+              alphaMLE=alphaMLE, hess=hess, optimTable=optimTable, 
+              tvec=tvec, tvecGPS=tvecGPS, optPar=opt$par, optGrad=optGrad, 
+              strikeDistGps = strikeDistGps, dipDistGps = dipDistGps, 
+              strikeDistCsz = strikeDistCsz, dipDistCsz = dipDistCsz))
 }
 
 
 # compute derivative of Matern correlation matrix with respect to phi (assuming 3/2 smoothness)
-corrGrad = function(distMat, phiZeta, corMat) {
+corrGrad = function(distMat, phiZeta, corMat, 
+                    anisotropic=FALSE, alpha=NULL, squareDistMatStrike=NULL, squareDistMatDip=NULL) {
   # distMat * (-1/phiZeta^2 + 1/(-phiZeta^2+(-phiZeta)*distMat)) * corMat
-  distMat^2/phiZeta^3 * exp(-distMat/phiZeta)
+  if(!anisotropic)
+    distMat^2/phiZeta^3 * exp(-distMat/phiZeta)
+  else {
+    ## an anisotropic case, compute derivative with respect to phi and alpha
+    # derivative with respect to phi
+    dphi = distMat^2/phiZeta^3 * exp(-distMat/phiZeta)
+    
+    # derivative with respect to alpha
+    numerator = alpha * squareDistMatStrike - alpha^(-3) * squareDistMatDip
+    denominator = distMat
+    # dalpha = (1 - 1 / phiZeta) * corMat * (numerator / denominator)
+    dalpha = (1 / (phiZeta + distMat) - 1 / phiZeta) * corMat * (numerator / denominator)
+    diag(dalpha) = 0
+    
+    list(dphi=dphi, dalpha=dalpha)
+  }
 }
 
 # compute the derivative of the expectation of muX
 meanXGrad = function(muZeta, nPar, tvecGPS, tGrad, gpsDat=slipDatCSZ, normalModel=FALSE, 
-                     taperedGPSDat=FALSE) {
+                     taperedGPSDat=FALSE, anisotropic=FALSE) {
   
   ##### get conditional MLE of muXi
   # Calculate the standard error vector of xi. Derivation from week 08_30_17.Rmd presentation.  
@@ -272,11 +390,11 @@ meanXGrad = function(muZeta, nPar, tvecGPS, tGrad, gpsDat=slipDatCSZ, normalMode
     if(!normalModel) {
       ExpXGrad[,1] = 1
       if(taperedGPSDat)
-        ExpXGrad[,3:(nPar-1)] = 1/tGrad
+        ExpXGrad[,3:(nPar-1 - anisotropic)] = 1/tGrad
     }
     else {
       # ExpXGrad[,3:(nPar-1)] = gammaEst * muZeta * tGrad + outer(c(tvecGPS * muZeta), c(gammaEst * matrix(ci*tvecGPS, nrow=1) %*% tGrad))
-      ExpXGrad[,3:(nPar-1)] = muZeta * gammaEst * (tvecGPS %*% matrix(-ci/tvecGPS, nrow=1) + diag(nrow=length(tvecGPS))) %*% tGrad
+      ExpXGrad[,3:(nPar-1 - anisotropic)] = muZeta * gammaEst * (tvecGPS %*% matrix(-ci/tvecGPS, nrow=1) + diag(nrow=length(tvecGPS))) %*% tGrad
     }
   }
   else {
@@ -289,7 +407,8 @@ meanXGrad = function(muZeta, nPar, tvecGPS, tGrad, gpsDat=slipDatCSZ, normalMode
 # compute the derivative of the covariance matrix of X
 covXGrad = function(muZeta, sigmaZeta, tvecGPS, tGrad, corMatGPS, nPar, distMatGPS=NULL, 
                     phiZeta=NULL, gpsDat=slipDatCSZ, normalModel=FALSE, taperedGPSDat=FALSE, 
-                    corGPS=FALSE) {
+                    corGPS=FALSE, anisotropic=FALSE, alpha=1, squareDistMatStrike=NULL, 
+                    squareDistMatDip=NULL) {
   
   ##### get conditional MLE of muXi
   # Calculate the standard error vector of xi. Derivation from week 08_30_17.Rmd presentation.  
@@ -317,7 +436,8 @@ covXGrad = function(muZeta, sigmaZeta, tvecGPS, tGrad, corMatGPS, nPar, distMatG
   if(!normalModel) {
     SigmaGrad[,,2] = 2*sigmaZeta*corMatGPS
     if(taperedGPSDat) {
-      SigmaGrad[,,nPar] = sigmaZeta^2 * corrGrad(distMatGPS, phiZeta, corMatGPS)
+      SigmaGrad[,,nPar] = sigmaZeta^2 * corrGrad(distMatGPS, phiZeta, corMatGPS, 
+                                                 anisotropic, alpha, squareDistMatStrike, squareDistMatDip)
     }
   }
   else {
@@ -338,14 +458,34 @@ covXGrad = function(muZeta, sigmaZeta, tvecGPS, tGrad, corMatGPS, nPar, distMatG
         # pt2 = gammaEst^2 * (tmp + t(tmp))
         tmp = tGrad[,nKnotsTot-i+1] %*% matrix(tvecGPS, nrow=1)
         pt2 = gammaEst^2 * corMatGPS * sigmaZeta^2 * (tmp + t(tmp))
-        SigmaGrad[,,nPar-i] = pt1 + pt2
+        SigmaGrad[,,nPar-i - anisotropic] = pt1 + pt2
       }
-      CGrad = corrGrad(distMatGPS, phiZeta, corMatGPS)
-      SigmaGrad[,,nPar] = sigmaZeta^2 * gammaEst^2 * sweep(sweep(CGrad, 1, tvecGPS, "*"), 2, tvecGPS, "*")
       
-      if(corGPS) {
-        extraBit = sweep(sweep(CGrad, 1, sigmaXi, "*"), 2, sigmaXi, "*")
-        SigmaGrad[,,nPar] = SigmaGrad[,,nPar] + extraBit
+      if(!anisotropic) {
+        CGrad = corrGrad(distMatGPS, phiZeta, corMatGPS, 
+                         anisotropic, alpha, squareDistMatStrike, squareDistMatDip)
+        SigmaGrad[,,nPar] = sigmaZeta^2 * gammaEst^2 * sweep(sweep(CGrad, 1, tvecGPS, "*"), 2, tvecGPS, "*")
+        
+        if(corGPS) {
+          extraBit = sweep(sweep(CGrad, 1, sigmaXi, "*"), 2, sigmaXi, "*")
+          SigmaGrad[,,nPar] = SigmaGrad[,,nPar] + extraBit
+        }
+      }
+      else {
+        out = corrGrad(distMatGPS, phiZeta, corMatGPS, 
+                       anisotropic, alpha, squareDistMatStrike, squareDistMatDip)
+        CGrad = out$dphi
+        alphaGrad = out$dalpha
+        
+        SigmaGrad[,,nPar - 1] = sigmaZeta^2 * gammaEst^2 * sweep(sweep(CGrad, 1, tvecGPS, "*"), 2, tvecGPS, "*")
+        SigmaGrad[,,nPar] = sigmaZeta^2 * gammaEst^2 * sweep(sweep(alphaGrad, 1, tvecGPS, "*"), 2, tvecGPS, "*")
+        if(corGPS) {
+          # if we assume the same correlation structure in the measurement error of xi, we must account for this
+          extraBitPhi = sweep(sweep(CGrad, 1, sigmaXi, "*"), 2, sigmaXi, "*")
+          extraBitAlpha = sweep(sweep(alphaGrad, 1, sigmaXi, "*"), 2, sigmaXi, "*")
+          SigmaGrad[,,nPar - 1] = SigmaGrad[,,nPar - 1] + extraBitPhi
+          SigmaGrad[,,nPar] = SigmaGrad[,,nPar] + extraBitAlpha
+        }
       }
     }
   }

@@ -126,9 +126,11 @@ taperVals = function(params, depths, Xi, dStar, normalizeTaper=TRUE) {
 
 # jacobian(subsidenceLnLikMod2Test, params, distMatCSZ=distMatCSZ, gpsDat=gpsDat, subDat=subDat,
 #          G=G, nKnots=nKnots, normalizeTaper=normalizeTaper, dStar=dStar, fault=fault, latRange=latRange,
-#          normalModel=normalModel, taperedGPSDat=taperedGPSDat)
+#          normalModel=normalModel, taperedGPSDat=taperedGPSDat, anisotropic=anisotropic,
+#          squareStrikeDistCsz=squareStrikeDistCsz, squareDipDistCsz=squareDipDistCsz)
 subsidenceLnLikMod2Test = function(params, distMatCSZ, gpsDat=slipDatCSZ, subDat=dr1, G=NULL, nKnots=5, normalizeTaper=TRUE, 
-                                   dStar=28000, fault=csz, latRange = c(40, 50), normalModel=FALSE, taperedGPSDat=FALSE) {
+                                   dStar=28000, fault=csz, latRange = c(40, 50), normalModel=FALSE, taperedGPSDat=FALSE, 
+                                   anisotropic=FALSE, squareStrikeDistCsz=NULL, squareDipDistCsz=NULL) {
   cszDepths = getFaultCenters(fault)[,3]
   
   ##### get parameters
@@ -136,8 +138,9 @@ subsidenceLnLikMod2Test = function(params, distMatCSZ, gpsDat=slipDatCSZ, subDat
   sigmaZeta = params[2]
   if(!taperedGPSDat)
     splinePar = params[-c(1:2)]
-  else
-    splinePar = params[-c(1:2, length(params))]
+  else {
+    splinePar = params[-c(1:2, length(params), length(params) - 1)]
+  }
   
   # compute correlation matrix for GPS data
   if(!taperedGPSDat) {
@@ -146,7 +149,12 @@ subsidenceLnLikMod2Test = function(params, distMatCSZ, gpsDat=slipDatCSZ, subDat
     nuZeta = corPar$nuZeta
   }
   else {
-    phiZeta = params[length(params)]
+    if(!anisotropic)
+      phiZeta = params[length(params)]
+    else {
+      alpha = params[length(params)]
+      phiZeta = params[length(params) - 1]
+    }
     nuZeta=3/2
   }
   
@@ -166,31 +174,46 @@ subsidenceLnLikMod2Test = function(params, distMatCSZ, gpsDat=slipDatCSZ, subDat
   
   ##### compute covariance of LOG of Zeta and its Cholesky decomp
   coords = cbind(fault$longitude, fault$latitude)
-  corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                             onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
-  SigmaZetaCSZ = sigmaZeta^2 * corMatCSZ
+  if(!anisotropic) {
+    corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                               onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+    SigmaZetaCSZ = sigmaZeta^2 * corMatCSZ
+  } else {
+    # compute distance matrices accounting for anisotropy
+    distMatCSZ = sqrt(alpha^2 * squareStrikeDistCsz + (1 / alpha^2) * squareDipDistCsz)
+    
+    # now generate correlation matrices and the Cholesky decomposition if necessary
+    corMatCSZ = stationary.cov(NA, Covariance="Matern", theta=phiZeta,
+                               onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+    SigmaZetaCSZ = sigmaZeta^2 * corMatCSZ
+  }
   
   ##### Compute Likelihood of subsidence and GPS data
   subsidenceLnLikMod2(rep(muZeta, nrow(fault)), lambda, sigmaZeta, SigmaZetaCSZ, G, subDat=subDat, tvec=tvec, 
                       dStar=dStar, normalModel=normalModel)[1]
 }
-# jacobian(subsidenceLnLikMod2Test, params, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, gpsDat=gpdDat,
-#          subDat=subDat, muZeta=muZeta, G=G, nKnots=nKnots, normalizeTaper=normalizeTaper, dStar=dStar,
-#          fault=fault, latRange=latRange, normalModel=normalModel)
+# jacobian for the above function is above
 
+# SOMETHING IS WRONG WITH THE BELOW FUNCTION:
 # jacobian(GPSLnLikTest, params, gpsDat=gpsDat, fault=fault, muZeta=muZeta, normalizeTaper=normalizeTaper, G=G,
-#          dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat)
+#          dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat,
+#          anisotropic=anisotropic, squareStrikeDistGps=squareStrikeDistGps, squareDipDistGps=squareDipDistGps)
 # GPSLnLikTest(params, gpsDat=gpsDat, fault=fault, muZeta=muZeta, normalizeTaper=normalizeTaper, G=G,
 #              dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat)
 GPSLnLikTest = function(params, gpsDat=slipDatCSZ, fault=csz, muZeta=NULL, normalizeTaper=TRUE, G=NULL, 
-                        dStar=28000, latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE, corGPS=FALSE) {
+                        dStar=28000, latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE, corGPS=FALSE, 
+                        anisotropic=FALSE, squareStrikeDistGps=NULL, squareDipDistGps=NULL) {
   ##### get parameters
   muZeta = params[1]
   sigmaZeta = params[2]
   if(!taperedGPSDat)
     splinePar = params[-c(1:2)]
-  else
-    splinePar = params[-c(1:2, length(params))]
+  else {
+    if(!anisotropic)
+      splinePar = params[-c(1:2, length(params))]
+    else
+      splinePar = params[-c(1:2, length(params), length(params) - 1)]
+  }
   
   # compute correlation matrix for GPS data
   if(!taperedGPSDat) {
@@ -199,15 +222,27 @@ GPSLnLikTest = function(params, gpsDat=slipDatCSZ, fault=csz, muZeta=NULL, norma
     nuZeta = corPar$nuZeta
   }
   else {
-    phiZeta = params[length(params)]
+    phiZeta = params[length(params) - anisotropic]
+    if(anisotropic)
+      alpha = params[length(params)]
     nuZeta=3/2
   }
   coords = cbind(gpsDat$lon, gpsDat$lat)
-  corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta, 
-                             onlyUpper=FALSE, smoothness=nuZeta, 
-                             Distance="rdist.earth", Dist.args=list(miles=FALSE))
+  if(!anisotropic) {
+    corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta, 
+                               onlyUpper=FALSE, smoothness=nuZeta, 
+                               Distance="rdist.earth", Dist.args=list(miles=FALSE))
+  }
+  else {
+    # compute distance matrices accounting for anisotropy
+    distMatGPS = sqrt(alpha^2 * squareStrikeDistGps + (1 / alpha^2) * squareDipDistGps)
+    
+    # now generate correlation matrices and the Cholesky decomposition if necessary
+    corMatGPS = stationary.cov(NA, Covariance="Matern", theta=phiZeta,
+                               onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+  }
   
-  ##### compute covariance of EXPONENT of Zeta and its Cholesky decomp
+  ##### compute covariance of Zeta and its Cholesky decomp
   SigmaZetaGPS = sigmaZeta^2 * corMatGPS
   
   if(taperedGPSDat) {
@@ -465,12 +500,13 @@ covGradTest = function(params, corMatCSZL, G=NULL, normalizeTaper=TRUE, fault=cs
                 # latRange, normalModel, taperedGPSDat, distMatCSZ, cszDepths)
 covYGradNumeric = function(params, G=NULL, nKnots=5, normalizeTaper=TRUE, subDat=dr1, 
                            fault=csz, colNum=NA, dStar=28000, latRange=c(40,50), normalModel=FALSE, 
-                           taperedGPSDat=FALSE, distMatCSZ, cszDepths) {
+                           taperedGPSDat=FALSE, distMatCSZ, cszDepths, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
   
   # return the given column of SigmaY for the input parameters
   getSigmaYCol = function(params, colI=1) {
     SigmaY = getSigmaY(params, G, nKnots, normalizeTaper, subDat, fault, dStar, latRange, normalModel, 
-                       taperedGPSDat, distMatCSZ, cszDepths)
+                       taperedGPSDat, distMatCSZ, cszDepths, anisotropic=anisotropic, squareDipDist=squareDipDist, 
+                       squareStrikeDist=squareStrikeDist)
     
     return(SigmaY[,colI])
   }
@@ -517,15 +553,23 @@ covYiHessNumeric = function(params, corMatCSZL, G=NULL, nKnots=5, normalizeTaper
 # return SigmaY for the given input parameters
 getSigmaY = function(params, G=NULL, nKnots=5, normalizeTaper=TRUE, subDat=dr1, 
                      fault=csz, dStar=28000, latRange=c(40, 50), normalModel=FALSE, 
-                     taperedGPSDat=FALSE, distMatCSZ, cszDepths) {
+                     taperedGPSDat=FALSE, distMatCSZ, cszDepths, anisotropic=FALSE, 
+                     squareDipDist=NULL, squareStrikeDist=NULL) {
   ##### get parameters
   muZeta = params[1]
   muVecCSZ = rep(muZeta, nrow(fault))
   sigmaZeta = params[2]
   taperPar = params[3:(2+nKnots)]
   lambda0 = 0.25
-  if(taperedGPSDat)
-    phiZeta=params[length(params)]
+  if(taperedGPSDat) {
+    if(!anisotropic)
+      phiZeta=params[length(params)]
+    else {
+      alpha=params[length(params)]
+      phiZeta=params[length(params) - 1]
+    }
+  }
+  
   
   ##### compute unit slip Okada seadef if necessary
   if(is.null(G)) {
@@ -543,11 +587,21 @@ getSigmaY = function(params, G=NULL, nKnots=5, normalizeTaper=TRUE, subDat=dr1,
     covMatCSZ = sigmaZeta^2 * corMatCSZ
   }
   else {
-    coords = cbind(fault$longitude, fault$latitude)
-    nuZeta = 3/2
-    corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                               onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
-    covMatCSZ = sigmaZeta^2 * corMatCSZ
+    if(!anisotropic) {
+      coords = cbind(fault$longitude, fault$latitude)
+      nuZeta = 3/2
+      corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                                 onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+      covMatCSZ = sigmaZeta^2 * corMatCSZ
+    }
+    else {
+      coords = cbind(fault$longitude, fault$latitude)
+      nuZeta = 3/2
+      distMatCSZ = sqrt(alpha^2 * squareStrikeDist + (1 / alpha^2) * squareDipDist)
+      corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                                 onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+      covMatCSZ = sigmaZeta^2 * corMatCSZ
+    }
   }
   # expectZeta = exp(muVecCSZ + diag(covMatCSZ)/2)
   # covZeta = exp(covMatCSZ) - 1
@@ -575,12 +629,12 @@ getSigmaY = function(params, G=NULL, nKnots=5, normalizeTaper=TRUE, subDat=dr1,
 # compute correlation matrix gradient numerically. Should match with corGrad function.
 # If colNum is NA, then return entire thing, otherwise return a specific column 
 # of the gradient tensor (c, :, :)
-# corGradNumeric(params, distMatCSZ, 1)
-corGradNumeric = function(params, distMat, colNum=NA) {
+# test = corGradNumeric(params, distMatGPS, 1, anisotropic=anisotropic, squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps)
+corGradNumeric = function(params, distMat, colNum=NA, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
   
   # return the given column of SigmaY for the input parameters
   getCorCol = function(params, colI=1) {
-    corMat = getCorZeta(params, distMat)
+    corMat = getCorZeta(params, distMat, anisotropic=anisotropic, squareDipDist=squareDipDist, squareStrikeDist=squareStrikeDist)
     
     return(corMat[,colI])
   }
@@ -606,8 +660,14 @@ corGradNumeric = function(params, distMat, colNum=NA) {
   return(fullGrad)
 }
 # get arbitrary correlation matrix for a given distMat (for testing taperedGPS data model)
-getCorZeta = function(params, distMat) {
-  phiZeta = params[length(params)]
+getCorZeta = function(params, distMat, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
+  if(!anisotropic)
+    phiZeta = params[length(params)]
+  else {
+    phiZeta = params[length(params) - 1]
+    alpha = params[length(params)]
+    distMat = sqrt(alpha^2 * squareStrikeDist + (1 / alpha^2) * squareDipDist)
+  }
   nuZeta = 3/2
   corMat = stationary.cov(cbind(1,1), Covariance="Matern", theta=phiZeta,
                              onlyUpper=FALSE, distMat=distMat, smoothness=nuZeta)
@@ -1323,15 +1383,17 @@ testPriorLogLik = function(params, G, fauxG) {
 
 # covariance of X
 # test = covXGradNumeric(params, nKnots, normalizeTaper, gpsDat, 1, dStar, latRange, normalModel,
-#                        taperedGPSDat, distMatGPS, corGPS=corGPS)
+#                        taperedGPSDat, distMatGPS, corGPS=corGPS, anisotropic=anisotropic,
+#                        squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps)
 covXGradNumeric = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, 
                            colNum=NA, dStar=28000, latRange=c(40,50), normalModel=FALSE, 
-                           taperedGPSDat=FALSE, distMatGPS, corGPS=FALSE) {
+                           taperedGPSDat=FALSE, distMatGPS, corGPS=FALSE, anisotropic=FALSE, 
+                           squareDipDist=NULL, squareStrikeDist=NULL) {
   
   # return the given column of SigmaY for the input parameters
   getSigmaXCol = function(params, colI=1) {
     SigmaX = getSigmaX(params, nKnots, normalizeTaper, gpsDat, dStar, latRange, normalModel, 
-                       taperedGPSDat, distMatGPS, corGPS)
+                       taperedGPSDat, distMatGPS, corGPS, anisotropic, squareDipDist, squareStrikeDist)
     
     return(SigmaX[,colI])
   }
@@ -1363,15 +1425,22 @@ covXGradNumeric = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDat
 # return SigmaY for the given input parameters
 getSigmaX = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, 
                      dStar=28000, latRange=c(40, 50), normalModel=FALSE, 
-                     taperedGPSDat=FALSE, distMatGPS, corGPS=FALSE) {
+                     taperedGPSDat=FALSE, distMatGPS, corGPS=FALSE, anisotropic=FALSE, 
+                     squareDipDist=NULL, squareStrikeDist=NULL) {
   ##### get parameters
   muZeta = params[1]
   muVecGPS = rep(muZeta, nrow(gpsDat))
   sigmaZeta = params[2]
   taperPar = params[3:(2+nKnots)]
   lambda0 = 0.25
-  if(taperedGPSDat)
-    phiZeta=params[length(params)]
+  if(taperedGPSDat) {
+    if(!anisotropic)
+      phiZeta=params[length(params)]
+    else {
+      alpha=params[length(params)]
+      phiZeta=params[length(params) - 1]
+    }
+  }
   
   # compute spline basis matrix for subsidence data
   XiGPS = getSplineBasis(data.frame(list(latitude=gpsDat$lat)), nKnots=nKnots, latRange=latRange)
@@ -1406,9 +1475,18 @@ getSigmaX = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ,
     phiZeta=corPar$phiZeta
   }
   nuZeta = 3/2
-  corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                             onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
-  covMatGPS = sigmaZeta^2 * corMatGPS
+  if(!anisotropic) {
+    corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                               onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+    covMatGPS = sigmaZeta^2 * corMatGPS
+  } else {
+    nuZeta = 3/2
+    distMatGPS = sqrt(alpha^2 * squareStrikeDist + (1 / alpha^2) * squareDipDist)
+    corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                               onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+    covMatGPS = sigmaZeta^2 * corMatGPS
+  }
+  
   
   # now ready to compute SigmaX
   if(taperedGPSDat)
@@ -1429,15 +1507,21 @@ getSigmaX = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ,
 }
 
 # covariance of X inverted
+# testNumeric = jacobian(covXInvGradNumeric, params, nKnots=nKnotsGPS, normalizeTaper=normalizeTaper, gpsDat=gpsDat, colNum=1,
+#                        dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat,
+#                        distMatGPS=distMatGPS, anisotropic=anisotropic, squareDipDist=squareDipDistGps,
+#                        squareStrikeDist=squareStrikeDistGps)
 # test = covXInvGradNumeric(params, nKnots, normalizeTaper, gpsDat, 1, dStar, latRange, normalModel, taperedGPSDat, distMatGPS)
 covXInvGradNumeric = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, 
                               colNum=NA, dStar=28000, latRange=c(40,50), normalModel=FALSE, 
-                              taperedGPSDat=FALSE, distMatGPS) {
+                              taperedGPSDat=FALSE, distMatGPS, anisotropic=FALSE, 
+                              squareDipDist=NULL, squareStrikeDist=NULL) {
   
   # return the given column of SigmaY for the input parameters
   getSigmaXInvCol = function(params, colI=1) {
     SigmaX = getSigmaX(params, nKnots, normalizeTaper, gpsDat, dStar, latRange, normalModel, 
-                       taperedGPSDat, distMatGPS)
+                       taperedGPSDat, distMatGPS, anisotropic=anisotropic, 
+                       squareDipDist=squareDipDist, squareStrikeDist=squareStrikeDist)
     
     return(solve(SigmaX)[,colI])
   }
@@ -1467,10 +1551,9 @@ covXInvGradNumeric = function(params, nKnots=5, normalizeTaper=TRUE, gpsDat=slip
 }
 
 # mean of X
-# jacobian(expXNumeric, params, gpsDat=gpsDat, nKnots=nKnots, latRange=latRange,
+# head(jacobian(expXNumeric, params, gpsDat=gpsDat, nKnots=nKnotsGPS, latRange=latRange,
 #          dStar=dStar, normalizeTaper=normalizeTaper, taperedGPSDat=taperedGPSDat,
-#          normalModel=normalModel)
-
+#          normalModel=normalModel))
 expXNumeric = function(params, gpsDat=slipDatCSZ, nKnots=5, latRange=c(40,50), dStar=28000, 
                        normalizeTaper=TRUE, taperedGPSDat=FALSE, normalModel=FALSE) {
   ##### get parameters
@@ -1479,8 +1562,6 @@ expXNumeric = function(params, gpsDat=slipDatCSZ, nKnots=5, latRange=c(40,50), d
   sigmaZeta = params[2]
   taperPar = params[3:(2+nKnots)]
   lambda0 = 0.25
-  if(taperedGPSDat)
-    phiZeta=params[length(params)]
   
   # compute spline basis matrix for subsidence data
   XiGPS = getSplineBasis(data.frame(list(latitude=gpsDat$lat)), nKnots=nKnots, latRange=latRange)
@@ -1518,13 +1599,15 @@ expXNumeric = function(params, gpsDat=slipDatCSZ, nKnots=5, latRange=c(40,50), d
 ###### test GPS log likelihood (each of its parts)
 # jacobian(logLikGPXQuad, params, distMatGPS=distMatGPS, nKnots=nKnots, normalizeTaper=normalizeTaper,
 #          gpsDat=gpsDat, dStar=dStar, normalModel=normalModel, taperedGPSDat=taperedGPSDat, latRange=latRange,
+#          corGPS=corGPS, anisotropic=anisotropic, squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps,
 #          method.args=list(eps=1e-5, d=0.0001, zero.tol=sqrt(.Machine$double.eps/7e-7), r=6, v=2, show.details=FALSE))
 logLikGPXQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, 
-                         dStar=28000, normalModel=FALSE, taperedGPSDat=FALSE, latRange=c(40,50)) {
+                         dStar=28000, normalModel=FALSE, taperedGPSDat=FALSE, latRange=c(40,50), 
+                         corGPS=FALSE, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
   
   # first get Variance matrix of X and invert
   SigmaX = getSigmaX(params, nKnots, normalizeTaper, gpsDat, dStar, latRange, normalModel, 
-                     taperedGPSDat, distMatGPS)
+                     taperedGPSDat, distMatGPS, corGPS, anisotropic, squareDipDist, squareStrikeDist)
   SigmaXInv = qr.solve(SigmaX)
   
   # get Y (uplift, so negative subsidence)
@@ -1537,9 +1620,11 @@ logLikGPXQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gpsD
 }
 
 # jacobian(logLikGPXMuQuad, params, distMatGPS=distMatGPS, nKnots=nKnots, normalizeTaper=normalizeTaper,
-#          gpsDat=gpsDat, dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat)
+#          gpsDat=gpsDat, dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat,
+#          corGPS=corGPS, anisotropic=anisotropic, squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps)
 logLikGPXMuQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, dStar=28000, 
-                           latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE) {
+                           latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE, 
+                           corGPS=FALSE, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
   
   ##### get parameters
   muZeta = params[1]
@@ -1553,7 +1638,7 @@ logLikGPXMuQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gp
   
   # first get Variance matrix of X and invert
   SigmaX = getSigmaX(params, nKnots, normalizeTaper, gpsDat, dStar, latRange, normalModel, 
-                     taperedGPSDat, distMatGPS)
+                     taperedGPSDat, distMatGPS, corGPS, anisotropic, squareDipDist, squareStrikeDist)
   SigmaXInv = qr.solve(SigmaX)
   
   # compute spline basis matrix for subsidence data
@@ -1590,9 +1675,11 @@ logLikGPXMuQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gp
 }
 
 # jacobian(logLikGPMuXQuad, params, distMatGPS=distMatGPS, nKnots=nKnots, normalizeTaper=normalizeTaper,
-#          gpsDat=gpsDat, dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat)
+#          gpsDat=gpsDat, dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat,
+#          corGPS=corGPS, anisotropic=anisotropic, squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps)
 logLikGPMuXQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, dStar=28000, 
-                          latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE) {
+                          latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE, 
+                          corGPS=FALSE, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
   
   ##### get parameters
   muZeta = params[1]
@@ -1606,7 +1693,7 @@ logLikGPMuXQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gp
   
   # first get Variance matrix of X and invert
   SigmaX = getSigmaX(params, nKnots, normalizeTaper, gpsDat, dStar, latRange, normalModel, 
-                     taperedGPSDat, distMatGPS)
+                     taperedGPSDat, distMatGPS, corGPS, anisotropic, squareDipDist, squareStrikeDist)
   SigmaXInv = qr.solve(SigmaX)
   
   # compute spline basis matrix for subsidence data
@@ -1643,13 +1730,15 @@ logLikGPMuXQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gp
 }
 
 # jacobian(logLikGPXLogDetQuad, params, distMatGPS=distMatGPS, nKnots=nKnots, normalizeTaper=normalizeTaper, gpsDat=gpsDat,
-#          dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat)
+#          dStar=dStar, latRange=latRange, normalModel=normalModel, taperedGPSDat=taperedGPSDat,
+#          corGPS=corGPS, anisotropic=anisotropic, squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps)
 logLikGPXLogDetQuad = function(params, distMatGPS, nKnots=5, normalizeTaper=TRUE, gpsDat=slipDatCSZ, dStar=28000, 
-                               latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE) {
+                               latRange=c(40,50), normalModel=FALSE, taperedGPSDat=FALSE, 
+                               corGPS=FALSE, anisotropic=FALSE, squareDipDist=NULL, squareStrikeDist=NULL) {
   
   # first get Variance matrix of X and invert
   SigmaX = getSigmaX(params, nKnots, normalizeTaper, gpsDat, dStar, latRange, normalModel, 
-                     taperedGPSDat, distMatGPS)
+                     taperedGPSDat, distMatGPS, corGPS, anisotropic, squareDipDist, squareStrikeDist)
   SigmaXInv = qr.solve(SigmaX)
   
   # method 1: Cholesky decomp

@@ -1,0 +1,121 @@
+\begin{thebibliography}{21}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{{#1}}
+\providecommand{\urlprefix}{URL }
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{DOI~\discretionary{}{}{}#1}\else
+  \providecommand{\doi}{DOI~\discretionary{}{}{}\begingroup
+  \urlstyle{rm}\Url}\fi
+\providecommand{\eprint}[2][]{\url{#2}}
+
+\bibitem[{Evans et~al(2015)Evans, Loveless, and Meade}]{evans2015}
+Evans EL, Loveless JP, Meade BJ (2015) Total variation regularization of
+  geodetically and geologically constrained block models for the {W}estern
+  {U}nited {S}tates. Geophys J Int 202(2):713--727
+
+\bibitem[{Gelfand et~al(2010)Gelfand, Diggle, Guttorp, and Fuentes}]{handbook}
+Gelfand AE, Diggle P, Guttorp P, Fuentes M (2010) Handbook of spatial
+  statistics. CRC press
+
+\bibitem[{Goldfinger et~al(2012)Goldfinger, Nelson, Morey, Johnson, Patton,
+  Karabanov, Gutierrez-Pastor, Eriksson, Gracia, Dunhill
+  et~al}]{goldfinger2012}
+Goldfinger C, Nelson CH, Morey AE, Johnson JE, Patton JR, Karabanov E,
+  Gutierrez-Pastor J, Eriksson AT, Gracia E, Dunhill G, et~al (2012) Turbidite
+  event history: Methods and implications for {H}olocene paleoseismicity of the
+  {C}ascadia subduction zone. {US} Geol Survey Professional Paper 1661:170
+
+\bibitem[{Krige(1951)}]{kriging}
+Krige DG (1951) A statistical approach to some basic mine valuation problems on
+  the {W}itwatersrand. J South Afr Inst Min Metall 52(6):119--139
+
+\bibitem[{Lavall{\'e}e et~al(2006)Lavall{\'e}e, Liu, and
+  Archuleta}]{lavallee2006}
+Lavall{\'e}e D, Liu P, Archuleta RJ (2006) Stochastic model of heterogeneity in
+  earthquake slip spatial distributions. Geophys J Int 165(2):622--640
+
+\bibitem[{Leonard et~al(2010)Leonard, Currie, Mazzotti, and
+  Hyndman}]{leonard2010}
+Leonard LJ, Currie CA, Mazzotti S, Hyndman RD (2010) Rupture area and
+  displacement of past {C}ascadia great earthquakes from coastal coseismic
+  subsidence. Geol Soc Am Bull 122(11-12):2079--2096
+
+\bibitem[{LeVeque et~al(2016)LeVeque, Waagan, Gonz{\'a}lez, Rim, and
+  Lin}]{leveque2016}
+LeVeque RJ, Waagan K, Gonz{\'a}lez FI, Rim D, Lin G (2016) Generating random
+  earthquake events for probabilistic tsunami hazard assessment. Pure Appl
+  Geophys 173(12):3671--3692
+
+\bibitem[{Mai and Beroza(2002)}]{mai2002}
+Mai PM, Beroza GC (2002) A spatial random field model to characterize
+  complexity in earthquake slip. J Geophys Res-Sol Ea 107(B11)
+
+\bibitem[{McCaffrey et~al(2013)McCaffrey, King, Payne, and
+  Lancaster}]{mccaffrey2013}
+McCaffrey R, King RW, Payne SJ, Lancaster M (2013) Active tectonics of
+  northwestern {US} inferred from {GPS}-derived surface velocities. J Geophys
+  Res-Sol Ea 118(2):709--723
+
+\bibitem[{Melgar et~al(2016)Melgar, LeVeque, Dreger, and Allen}]{melgar2016}
+Melgar D, LeVeque RJ, Dreger DS, Allen RM (2016) Kinematic rupture scenarios
+  and synthetic displacement data: An example application to the {C}ascadia
+  {S}ubduction {Z}one. J Geophys Res-Sol Ea 121(9):6658--6674
+
+\bibitem[{Nash(1990)}]{BFGS}
+Nash JC (1990) Compact numerical methods for computers: linear algebra and
+  function minimisation. {CRC} press
+
+\bibitem[{Okada(1985)}]{okada}
+Okada Y (1985) Surface deformation due to shear and tensile faults in a
+  half-space. Bull Seismol Soc Am 75(4):1135--1154
+
+\bibitem[{Palacios and Steel(2006)}]{palacios2006non}
+Palacios MB, Steel MFJ (2006) Non-{G}aussian {B}ayesian geostatistical
+  modeling. J Am Stat Assoc 101(474):604--618
+
+\bibitem[{Pollitz and Evans(2017)}]{pollitz2017}
+Pollitz F, Evans E (2017) Implications of the earthquake cycle for inferring
+  fault locking on the {C}ascadia megathrust. Geophysical Journal International
+  209(1):167--185
+
+\bibitem[{Pollitz et~al(2010)Pollitz, McCrory, Wilson, Svarc, Puskas, and
+  Smith}]{faultGeom}
+Pollitz F, McCrory P, Wilson D, Svarc J, Puskas C, Smith RB (2010)
+  Viscoelastic-cycle model of interseismic deformation in the northwestern
+  {U}nited {S}tates. Geophys J Int 181(2):665--696
+
+\bibitem[{Reich and Fuentes(2007)}]{stickBreaking}
+Reich BJ, Fuentes M (2007) A multivariate semiparametric {B}ayesian spatial
+  modeling framework for hurricane surface wind fields. The Annals of Applied
+  Statistics pp 249--264
+
+\bibitem[{Stein(2012)}]{steinBook}
+Stein ML (2012) Interpolation of spatial data: some theory for kriging.
+  Springer Science \&amp; Business Media
+
+\bibitem[{Wang et~al(2012)Wang, Hu, and He}]{wang2012}
+Wang K, Hu Y, He J (2012) Deformation cycles of subduction earthquakes in a
+  viscoelastic {E}arth. Nat 484(7394):327
+
+\bibitem[{Wang et~al(2013)Wang, Engelhart, Wang, Hawkes, Horton, Nelson, and
+  Witter}]{wang2013}
+Wang PL, Engelhart SE, Wang K, Hawkes AD, Horton BP, Nelson AR, Witter RC
+  (2013) Heterogeneous rupture in the great {C}ascadia earthquake of 1700
+  inferred from coastal subsidence estimates. J Geophys Res-Sol Ea
+  118(5):2460--2473
+
+\bibitem[{Witter et~al(2011)Witter, Zhang, Wang, Priest, Goldfinger, Stimely,
+  English, and Ferro}]{Witter2011}
+Witter RC, Zhang Y, Wang K, Priest GR, Goldfinger C, Stimely LL, English JT,
+  Ferro PA (2011) Simulating tsunami inundation at {B}andon, {C}oos {County},
+  {Oregon}, using hypothetical {C}ascadia and {A}laska earthquake scenarios.
+  Oregon Dept Geol and Mineral Industries Spec Paper 43:57
+
+\bibitem[{Witter et~al(2013)Witter, Zhang, Wang, Priest, Goldfinger, Stimely,
+  English, and Ferro}]{Witter2013}
+Witter RC, Zhang YJ, Wang K, Priest GR, Goldfinger C, Stimely L, English JT,
+  Ferro PA (2013) Simulated tsunami inundation for a range of {C}ascadia
+  megathrust earthquake scenarios at {B}andon, {O}regon, {USA}. Geosphere
+  9(6):1783--1803
+
+\end{thebibliography}

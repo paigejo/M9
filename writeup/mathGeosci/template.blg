@@ -1,0 +1,47 @@
+This is BibTeX, Version 0.99d (TeX Live 2016)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: template.aux
+The style file: spbasic.bst
+Database file #1: cascadiaEQs.bib
+Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
+You've used 33 entries,
+            3270 wiz_defined-function locations,
+            894 strings with 12398 characters,
+and the built_in function-call counts, 54506 in all, are:
+= -- 5939
+> -- 1496
+< -- 14
++ -- 669
+- -- 480
+* -- 4072
+:= -- 6292
+add.period$ -- 33
+call.type$ -- 33
+change.case$ -- 317
+chr.to.int$ -- 33
+cite$ -- 33
+duplicate$ -- 5402
+empty$ -- 4063
+format.name$ -- 585
+if$ -- 11312
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 408
+newline$ -- 109
+num.names$ -- 132
+pop$ -- 1606
+preamble$ -- 1
+purify$ -- 289
+quote$ -- 0
+skip$ -- 1900
+stack$ -- 0
+substring$ -- 5504
+swap$ -- 2775
+text.length$ -- 3
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 282
+warning$ -- 0
+while$ -- 353
+width$ -- 0
+write$ -- 369

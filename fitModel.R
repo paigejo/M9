@@ -379,7 +379,7 @@ GPSLnLik = function(muZeta, SigmaZeta, gpsDat=slipDatCSZ, tvec = rep(1, length(s
     xCntr = x - muZeta - muXi - log(tvec)
   }
   
-  # if GPS data is correlated, make it correlated in the same way as the latent process
+  # if GPS measurement error is correlated, make it correlated in the same way as the latent process
   if(corGPS) {
     sigmaTZetas = sqrt(diag(SigmaZeta))
     CXi = sweep(sweep(SigmaZeta, 1, 1/sigmaTZetas, "*"), 2, 1/sigmaTZetas, "*")
@@ -699,8 +699,11 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NULL, g
                            G=NULL, nKnots=5, normalizeTaper=TRUE, dStar=21000, useASLApprox=FALSE, 
                            useSubPrior=FALSE, useSlipPrior=FALSE, fauxG=NULL, constrLambda=TRUE, latRange=c(40,50), 
                            normalModel=FALSE, taperedGPSDat=FALSE, distMatGPS=NULL, distMatCSZ=NULL, 
-                           corGPS=FALSE, diffGPSTaper=FALSE, nKnotsGPS=nKnots) {
+                           corGPS=FALSE, diffGPSTaper=FALSE, nKnotsGPS=nKnots, anisotropic=FALSE, 
+                           squareStrikeDistCsz=NULL, squareDipDistCsz=NULL, squareStrikeDistGps=NULL, 
+                           squareDipDistGps=NULL) {
   ##### get parameters
+  alpha = 1
   if(!taperedGPSDat) {
     tvec=NULL
     if(length(params) <= 3 && (nKnots != 1)) {
@@ -770,7 +773,10 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NULL, g
       if(is.null(muZeta)) {
         muZeta = params[1]
         sigmaZeta = params[2]
-        splinePar = params[-c(1:2, length(params))]
+        if(!anisotropic)
+          splinePar = params[-c(1:2, length(params))]
+        else
+          splinePar = params[-c(1:2, length(params) - 1, length(params))]
         if(diffGPSTaper) {
           splineParGPS = splinePar[-(1:nKnots)]
           splinePar = splinePar[1:nKnots]
@@ -791,7 +797,12 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NULL, g
     
     # now get the scale and smoothness parameters
     if(taperedGPSDat) {
-      phiZeta = params[length(params)]
+      if(!anisotropic)
+        phiZeta = params[length(params)]
+      else {
+        phiZeta = params[length(params) - 1]
+        alpha = params[length(params)]
+      }
       nuZeta = 3/2
     }
     else {
@@ -802,17 +813,33 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NULL, g
     
     ## compute CSZ and GPS correlation matrices (use onlyUpper option to save time since will just take 
     ## Cholesky decomposition of upper triangle anyway in both cases)
-    # CSZ/fault correlation matrix
-    coords = cbind(fault$longitude, fault$latitude)
-    if(phiZeta > 0) {
-      corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                                 onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
-      corMatCSZL = t(chol(corMatCSZ))
-    
-      # GPS covariance matrix
-      coords = cbind(gpsDat$lon, gpsDat$lat)
-      corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                                 onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+    if(alpha >= 0.05 &&  phiZeta >= 0 && alpha <= 20) {
+      if(!anisotropic) {
+        coords = cbind(fault$longitude, fault$latitude)
+        if(phiZeta > 0) {
+          corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                                     onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+          corMatCSZL = t(chol(corMatCSZ))
+          
+          # GPS covariance matrix
+          coords = cbind(gpsDat$lon, gpsDat$lat)
+          corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                                     onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+        }
+      }
+      else {
+        # compute distance matrices accounting for anisotropy
+        distMatCsz = sqrt(alpha^2 * squareStrikeDistCsz + (1 / alpha^2) * squareDipDistCsz)
+        distMatGps = sqrt(alpha^2 * squareStrikeDistGps + (1 / alpha^2) * squareDipDistGps)
+        
+        # now generate correlation matrices and the Cholesky decomposition if necessary
+        corMatCSZ = stationary.cov(NA, Covariance="Matern", theta=phiZeta,
+                                   onlyUpper=FALSE, distMat=distMatCsz, smoothness=nuZeta)
+        corMatCSZL = t(chol(corMatCSZ))
+        
+        corMatGPS = stationary.cov(NA, Covariance="Matern", theta=phiZeta,
+                                   onlyUpper=FALSE, distMat=distMatGps, smoothness=nuZeta)
+      }
     }
   }
   lambda0 = 0.25
@@ -829,8 +856,12 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NULL, g
                    "LL", "subLL", "GPSLL", "priorLL", "LLSE")
       }
       else {
-        cNames = c("muZeta", "sigmaZeta", knotNames, "phi", 
-                   "LL", "subLL", "GPSLL", "priorLL", "LLSE")
+        if(!anisotropic)
+          cNames = c("muZeta", "sigmaZeta", knotNames, "phi", 
+                     "LL", "subLL", "GPSLL", "priorLL", "LLSE")
+        else
+          cNames = c("muZeta", "sigmaZeta", knotNames, "phi", "alpha", 
+                     "LL", "subLL", "GPSLL", "priorLL", "LLSE")
       }
     }
     else {
@@ -910,7 +941,7 @@ fixedDataLogLik = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NULL, g
   else if(any(abs(lambdaSeq) > 15) && any(abs(lambdaSeqGPS) > 15))
     lambdaInRange=FALSE
   
-  if(!lambdaInRange || (sigmaZeta < 0) || (muZeta < 0) || (phiZeta < 0)) {
+  if(!lambdaInRange || (sigmaZeta <= 0) || (muZeta <= 0) || (phiZeta <= 0) || (alpha <= 0.05) || (alpha >= 20)) {
     if(useSlipPrior && useSubPrior) {
       if(!vecMu)
         newRow = rbind(c(params, -10000, -5000, -5000, 0, NA, NA, NA, NA))
@@ -2376,7 +2407,7 @@ doFitSplineCoord = function(initParams=NULL, nsim=500, useMVNApprox=FALSE, gpsDa
 #       E[Y] you must take the negative of this
 meanGrad = function(expectZeta, lambda, Xi, G, fault=csz, 
                     normalizeTaper=TRUE, dStar=21000, muZeta=NULL, sigmaZeta=NULL, 
-                    index=1:nrow(G), normalModel=FALSE, phiZeta=NULL) {
+                    index=1:nrow(G), normalModel=FALSE, phiZeta=NULL, anisotropic=FALSE) {
   
   # first get the indices we actually want (defaults to all indices) and make sure we still have a matrix
   G = matrix(G[index,], ncol=ncol(G))
@@ -2430,7 +2461,10 @@ meanGrad = function(expectZeta, lambda, Xi, G, fault=csz,
     phiPart = 0
   }
   
-  cbind(muPart, sigmaPart, taperPart, phiPart)
+  if(!anisotropic)
+    cbind(muPart, sigmaPart, taperPart, phiPart)
+  else
+    cbind(muPart, sigmaPart, taperPart, phiPart, 0) # alpha component of gradient is 0
 }
 
 # gradient of Var(Y) with respect to beta vec, the taper parameters.  Returns an n x p matrix 
@@ -2573,7 +2607,8 @@ fitSplinesToSubDat = function(varSplineParInit=NULL, nKnotsMean=5, nKnotsVar=4, 
 # NOTE: varMatCSZ is SigmaZeta (variance of zeta not of log-zeta)
 covGrad = function(varMatCSZ, lambda, tvec=NULL, Xi, G, fault=csz, normalizeTaper=TRUE, dStar=21000, 
                    muZeta=NULL, sigmaZeta=NULL, corZeta=NULL, subDat=dr1, normalModel=FALSE, phiZeta=NULL, 
-                   corMatCSZ=NULL, distMat=NULL) {
+                   corMatCSZ=NULL, distMat=NULL, anisotropic=FALSE, alpha=1, squareStrikeDist=NULL, 
+                   squareDipDist=NULL) {
   # get taper gradient
   depths = getFaultCenters(fault)[,3]
   tGrad = taperGrad(depths, Xi, lambda, dStar=dStar, normalize=normalizeTaper)
@@ -2616,10 +2651,11 @@ covGrad = function(varMatCSZ, lambda, tvec=NULL, Xi, G, fault=csz, normalizeTape
     dLog = sqrt(diag(DCD))
   }
   
-  # now compute muPart and sigmaPart of gradient matrix if necessary
+  # now compute muPart alphaPart and phiPart and sigmaPart of gradient matrix if necessary
   muPart = NULL
   sigmaPart = NULL
   phiPart = NULL
+  alphaPart = NULL
   if(!is.null(muZeta)) {
     if(!normalModel) {
       tvec = taper(getFaultCenters(fault)[,3], lambda=lambda, dStar=dStar, normalize=normalizeTaper)
@@ -2655,9 +2691,16 @@ covGrad = function(varMatCSZ, lambda, tvec=NULL, Xi, G, fault=csz, normalizeTape
     }
   }
   
+  # phi and if necessary alpha component of gradient
   if(!is.null(phiZeta)) {
     
-    Cgrad = corrGrad(distMat, phiZeta, arealCSZCor)
+    out = corrGrad(distMat, phiZeta, arealCSZCor, anisotropic, alpha, squareStrikeDist, squareDipDist)
+    if(!anisotropic)
+      Cgrad = out
+    else {
+      Cgrad = out$dphi
+      alphaGrad = out$dalpha
+    }
     
     if(!normalModel) {
       phiPart = (varMatCSZ + exp(2*muZeta + sigmaZeta^2)) * sigmaZeta^2 * arealCSZCor * Cgrad
@@ -2668,11 +2711,22 @@ covGrad = function(varMatCSZ, lambda, tvec=NULL, Xi, G, fault=csz, normalizeTape
     if(is.null(GT))
       GT = sweep(G, 2, tvec, "*")
     phiPart = GT %*% phiPart %*% t(GT)
+    
+    if(anisotropic) {
+      if(!normalModel)
+        stop("non-normality is not supported under the anisotropic assumption")
+      
+      alphaPart = sigmaZeta^2 * alphaGrad
+      alphaPart = GT %*% alphaPart %*% t(GT)
+    }
   }
   
   # return a 3-dimensional array, where the derivative w.r.t. each parameter is 
   # a slice with the third dimension fixed.
-  fullGrad = abind(muPart, sigmaPart, taperPart, phiPart, along=3)
+  if(!anisotropic)
+    fullGrad = abind(muPart, sigmaPart, taperPart, phiPart, along=3)
+  else
+    fullGrad = abind(muPart, sigmaPart, taperPart, phiPart, alphaPart, along=3)
   
   # set different events to be independent (ijth element of gradient should be 0 if 
   # ith event not the same as jth event, since ijth element of covariance is 0)
@@ -2687,7 +2741,8 @@ covGrad = function(varMatCSZ, lambda, tvec=NULL, Xi, G, fault=csz, normalizeTape
 subLnLikGrad = function(expectZeta, expectY, lambda, Xi, G, varMatCSZ, tvec=NULL, 
                         fault=csz, subDat=dr1, normalizeTaper=TRUE, dStar=21000, pow=2, 
                         muZeta=NULL, sigmaZeta, SigmaYGrad=NULL, normalModel=FALSE, 
-                        phiZeta=NULL, distMat=NULL, corMatCSZ=NULL) {
+                        phiZeta=NULL, distMat=NULL, corMatCSZ=NULL, 
+                        anisotropic=FALSE, alpha=1, squareStrikeDist=NULL, squareDipDist=NULL) {
   ## do some precomputations:
   
   # get taper vector
@@ -2698,9 +2753,12 @@ subLnLikGrad = function(expectZeta, expectY, lambda, Xi, G, varMatCSZ, tvec=NULL
   if(is.null(SigmaYGrad))
     SigmaYGrad = covGrad(varMatCSZ, lambda, tvec, Xi, G, fault, normalizeTaper, dStar, 
                          muZeta, sigmaZeta, normalModel=normalModel, subDat=subDat, 
-                         phiZeta=phiZeta, corMatCSZ=corMatCSZ, distMat=distMat)
+                         phiZeta=phiZeta, corMatCSZ=corMatCSZ, distMat=distMat, 
+                         anisotropic=anisotropic, alpha=alpha, 
+                         squareStrikeDist=squareStrikeDist, 
+                         squareDipDist=squareDipDist)
   ExpYGrad = meanGrad(expectZeta, lambda, Xi, G, fault=fault, normalizeTaper, dStar, muZeta, 
-                      sigmaZeta, normalModel=normalModel, phiZeta=phiZeta)
+                      sigmaZeta, normalModel=normalModel, phiZeta=phiZeta, anisotropic=anisotropic)
   
   nPar = dim(SigmaYGrad)[3]
   
@@ -2885,7 +2943,8 @@ subLnLikGrad = function(expectZeta, expectY, lambda, Xi, G, varMatCSZ, tvec=NULL
 GPSLnLikGrad = function(muZeta, sigmaZeta, gpsDat=slipDatCSZ, corMatGPS=NULL, nPar=7, normalModel=FALSE, 
                         phiZeta=NULL, distMatGPS=NULL, 
                         taperedGPSDat=FALSE, tvecGPS=NULL, nKnots=5, dStar=21000, latRange=c(40,50), fault=csz, 
-                        normalizeTaper=TRUE, lambda=NULL, corGPS=FALSE, diffGPSTaper=FALSE) {
+                        normalizeTaper=TRUE, lambda=NULL, corGPS=FALSE, diffGPSTaper=FALSE, 
+                        anisotropic=FALSE, alpha=1, squareStrikeDist=NULL, squareDipDist=NULL) {
   
   # get gps data
   logX = log(gpsDat$slip)
@@ -2947,11 +3006,12 @@ GPSLnLikGrad = function(muZeta, sigmaZeta, gpsDat=slipDatCSZ, corMatGPS=NULL, nP
   
   # compute gradient of mu_X:
   ExpXGrad = meanXGrad(muZeta, nPar, tvecGPS, tGrad, gpsDat=gpsDat, normalModel=TRUE, 
-                       taperedGPSDat=taperedGPSDat)
+                       taperedGPSDat=taperedGPSDat, anisotropic=anisotropic)
   
   # compute gradient of Sigma_X:
   SigmaGrad = covXGrad(muZeta, sigmaZeta, tvecGPS, tGrad, corMatGPS, nPar, distMatGPS, 
-                       phiZeta, gpsDat, normalModel, taperedGPSDat, corGPS)
+                       phiZeta, gpsDat, normalModel, taperedGPSDat, corGPS, 
+                       anisotropic, alpha, squareStrikeDist, squareDipDist)
   
   # get Sigma_X (variance of log X)
   if(!normalModel) {
@@ -3031,7 +3091,9 @@ fixedDataLogLikGrad = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NUL
                                G=NULL, nKnots=5, normalizeTaper=TRUE, dStar=21000, useASLApprox=FALSE, 
                                useSubPrior=FALSE, useSlipPrior=FALSE, fauxG=NULL, constrLambda=TRUE, latRange=c(40,50), 
                                normalModel=FALSE, taperedGPSDat=FALSE, distMatGPS=NULL, distMatCSZ=NULL, 
-                               corGPS=FALSE, diffGPSTaper=FALSE, nKnotsGPS=nKnots) {
+                               corGPS=FALSE, diffGPSTaper=FALSE, nKnotsGPS=nKnots, anisotropic=FALSE, 
+                               squareDipDistGps=NULL, squareStrikeDistGps=NULL, 
+                               squareDipDistCsz=NULL, squareStrikeDistCsz=NULL) {
   
   ##### get parameters
   muZeta = params[1]
@@ -3043,14 +3105,22 @@ fixedDataLogLikGrad = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NUL
     taperParGPS = taperPar[-(1:nKnots)]
     taperPar = taperPar[1:nKnots]
   }
-  if(taperedGPSDat)
-    phiZeta = params[length(params)]
+  if(taperedGPSDat) {
+    if(!anisotropic)
+      phiZeta = params[length(params)]
+    else
+      phiZeta = params[length(params) - 1]
+  }
   else{
     out = getCorPar(normalModel)
     phiZeta = out$phiZeta
   }
   nuZeta=3/2
   lambda0 = 0.25
+  if(anisotropic)
+    alpha = params[length(params)]
+  else
+    alpha = 1
   
   ##### compute unit slip Okada seadef if necessary
   if(is.null(G)) {
@@ -3083,16 +3153,31 @@ fixedDataLogLikGrad = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NUL
   
   # compute covariance matrices for latent process on fault (CSZ) and locking data (GPS)
   if(taperedGPSDat) {
-    coords = cbind(fault$longitude, fault$latitude)
-    corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                               onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
-    corMatCSZL = t(chol(corMatCSZ))
-    covMatCSZ = sigmaZeta^2 * corMatCSZ
-    
-    # GPS covariance matrix
-    coords = cbind(gpsDat$lon, gpsDat$lat)
-    corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
-                               onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+    if(!anisotropic) {
+      coords = cbind(fault$longitude, fault$latitude)
+      corMatCSZ = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                                 onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+      corMatCSZL = t(chol(corMatCSZ))
+      covMatCSZ = sigmaZeta^2 * corMatCSZ
+      
+      # GPS covariance matrix
+      coords = cbind(gpsDat$lon, gpsDat$lat)
+      corMatGPS = stationary.cov(coords, Covariance="Matern", theta=phiZeta,
+                                 onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+    } else {
+      # compute distance matrices accounting for anisotropy
+      distMatCSZ = sqrt(alpha^2 * squareStrikeDistCsz + (1 / alpha^2) * squareDipDistCsz)
+      distMatGPS = sqrt(alpha^2 * squareStrikeDistGps + (1 / alpha^2) * squareDipDistGps)
+      
+      # now generate correlation matrices and the Cholesky decomposition if necessary
+      corMatCSZ = stationary.cov(NA, Covariance="Matern", theta=phiZeta,
+                                 onlyUpper=FALSE, distMat=distMatCSZ, smoothness=nuZeta)
+      covMatCSZ = sigmaZeta^2 * corMatCSZ
+      corMatCSZL = t(chol(corMatCSZ))
+      
+      corMatGPS = stationary.cov(NA, Covariance="Matern", theta=phiZeta,
+                                 onlyUpper=FALSE, distMat=distMatGPS, smoothness=nuZeta)
+    }
   }
   else {
     arealCSZCor = getArealCorMat(fault, normalModel=normalModel)
@@ -3125,17 +3210,26 @@ fixedDataLogLikGrad = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NUL
   # get covariance gradient
   SigmaYGrad = covGrad(covZeta, lambda, tvec, Xi, G, fault, normalizeTaper, dStar, 
                        muZeta, sigmaZeta, subDat=subDat, normalModel=normalModel, 
-                       distMat=distMatCSZ, phiZeta=phiZeta, corMatCSZ=corMatCSZ)
+                       distMat=distMatCSZ, phiZeta=phiZeta, corMatCSZ=corMatCSZ, 
+                       anisotropic=anisotropic, alpha=alpha, 
+                       squareStrikeDist=squareStrikeDistCsz, 
+                       squareDipDist=squareDipDistCsz)
   
   subGrad = subLnLikGrad(expectZeta, expectY, lambda, Xi, G, covZeta, tvec=tvec, 
                          fault, subDat, normalizeTaper, dStar, pow=2, 
                          muZeta, sigmaZeta, SigmaYGrad=SigmaYGrad, normalModel=normalModel, 
-                         phiZeta=phiZeta, distMat=distMatCSZ, corMatCSZ=corMatCSZ)
+                         phiZeta=phiZeta, distMat=distMatCSZ, corMatCSZ=corMatCSZ, 
+                         anisotropic=anisotropic, alpha=alpha, 
+                         squareStrikeDist=squareStrikeDistCsz, 
+                         squareDipDist=squareDipDistCsz)
   GPSGrad = GPSLnLikGrad(muZeta, sigmaZeta, gpsDat, nKnots=nKnots, normalModel=normalModel, 
                          corMatGPS=corMatGPS, nPar=length(params), phiZeta=phiZeta,
                          distMatGPS=distMatGPS, taperedGPSDat=taperedGPSDat, tvecGPS=tvecGPS, 
                          dStar=dStar, latRange=latRange, fault=fault, normalizeTaper=normalizeTaper, 
-                         lambda=lambdaGPS, corGPS=corGPS, diffGPSTaper=diffGPSTaper)
+                         lambda=lambdaGPS, corGPS=corGPS, diffGPSTaper=diffGPSTaper, 
+                         anisotropic=anisotropic, alpha=alpha, 
+                         squareStrikeDist=squareStrikeDistGps, 
+                         squareDipDist=squareDipDistGps)
   
   # adjust subsidence gradient to include zeros at the indices of the GPS taper parameters if necessary
   if(diffGPSTaper) {
@@ -3179,15 +3273,22 @@ fixedDataLogLikGrad = function(params, cszDepths, corMatGPS=NULL, corMatCSZL=NUL
   
   subGrad + GPSGrad + priorGrad
 }
-# corGradNumeric(params, distMatCSZ, 1)
-# corrGrad(distMatCSZ, phiZeta, corMatCSZ)
+# corGradNumeric(params, distMatCSZ, 1, anisotropic, squareStrikeDistCsz, squareDipDistCsz)
+# corrGrad(distMatCSZ, phiZeta, corMatCSZ, anisotropic, alpha, squareStrikeDistCsz, squareDipDistCsz)
 # jacobian(fixedDataLogLik, params, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, fault=fault, verbose=FALSE,
-#          phiZeta=phiZeta, useMVNApprox=TRUE, G=G, nKnots=nKnots, dStar=dStar, useSubPrior=useSubPrior, useSlipPrior=useSlipPrior,
-#          fauxG=fauxG, constrLambda=constrLambda, latRange=latRange, normalModel=normalModel, gpsDat=gpsDat, subDat=subDat)
+#          useMVNApprox=TRUE, G=G, nKnots=nKnots, dStar=dStar, useSubPrior=useSubPrior, useSlipPrior=useSlipPrior,
+#          fauxG=fauxG, constrLambda=constrLambda, latRange=latRange, normalModel=normalModel, gpsDat=gpsDat, subDat=subDat,
+#          anisotropic=anisotropic, squareDipDistGps=squareDipDistGps, squareStrikeDistGps=squareStrikeDistGps,
+#          squareDipDistCsz=squareDipDistCsz, squareStrikeDistCsz=squareStrikeDistCsz, taperedGPSDat=taperedGPSDat,
+#          normalizeTaper=normalizeTaper, corGPS=corGPS, diffGPSTaper=diffGPSTaper, nKnotsGPS=nKnotsGPS)
 # jacobian(fixedDataLogLik, params, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, verbose=FALSE, method.args=list(d=.0000001), 
 # phiZeta=phiZeta, useMVNApprox=TRUE, G=G, nKnots=nKnots, dStar=dStar, useSubPrior=useSubPrior, useSlipPrior=useSlipPrior, fauxG=fauxG)
-# test = covYGradNumeric(params, corMatCSZL, G, nKnots, normalizeTaper, subDat, fault, corZeta, colNum=1, dStar, latRange, normalModel)
-
+# test = covYGradNumeric(params, G, nKnots, normalizeTaper, subDat, fault, colNum=1, dStar, latRange, normalModel,
+#                        taperedGPSDat, distMatCSZ, cszDepths, anisotropic, squareDipDistCsz, squareStrikeDistCsz)
+# test = covXGradNumeric(params, nKnots=nKnotsGPS, normalizeTaper=normalizeTaper, gpsDat=gpsDat,
+#                        colNum=1, dStar=dStar, latRange=latRange, normalModel=normalModel,
+#                        taperedGPSDat=taperedGPSDat, distMatGPS=distMatGPS, corGPS=corGPS, anisotropic=anisotropic,
+#                        squareDipDist=squareDipDistGps, squareStrikeDist=squareStrikeDistGps)
 # for new model:
 # jacobian(fixedDataLogLik, params, cszDepths=cszDepths, corMatGPS=corMatGPS, corMatCSZL=corMatCSZL, fault=fault, verbose=FALSE,
 #          useMVNApprox=TRUE, G=G, nKnots=nKnots, dStar=dStar, useSubPrior=useSubPrior, useSlipPrior=useSlipPrior,

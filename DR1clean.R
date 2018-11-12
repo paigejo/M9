@@ -163,7 +163,7 @@ cleanDR1 = function() {
   newDat[,4] = -newDat[,4]
   
   # Don't remove this event!  It's a full or nearly full rupture that is agreed upon existing
-#   #remove T10R1 event.  Not sure what it is
+#   #remove T10R1 event
 #   newDat = newDat[newDat$event != "T10R1",]
   
   # save as rdata file

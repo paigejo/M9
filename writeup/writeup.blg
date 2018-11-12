@@ -1,0 +1,46 @@
+This is BibTeX, Version 0.99d (TeX Live 2016)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: writeup.aux
+The style file: te.bst
+Database file #1: cascadiaEQs.bib
+You've used 16 entries,
+            2904 wiz_defined-function locations,
+            713 strings with 8716 characters,
+and the built_in function-call counts, 11423 in all, are:
+= -- 854
+> -- 725
+< -- 3
++ -- 242
+- -- 222
+* -- 1004
+:= -- 1740
+add.period$ -- 47
+call.type$ -- 16
+change.case$ -- 152
+chr.to.int$ -- 16
+cite$ -- 32
+duplicate$ -- 800
+empty$ -- 746
+format.name$ -- 268
+if$ -- 2220
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 184
+newline$ -- 77
+num.names$ -- 64
+pop$ -- 320
+preamble$ -- 1
+purify$ -- 137
+quote$ -- 0
+skip$ -- 215
+stack$ -- 0
+substring$ -- 515
+swap$ -- 404
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 141
+warning$ -- 0
+while$ -- 73
+width$ -- 0
+write$ -- 203
