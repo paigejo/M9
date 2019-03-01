@@ -95,8 +95,8 @@ fitModelTMB = function(initParams, gpsDat=slipDatCSZ,
   xDepths = gpsDat$Depth
   faultDepths = cszDepths
   dStar = dStar
-  sdBasisX = getSplineBasis(fault, nKnots=nKnotsVar, latRange=latRange)
-  sdBasisY = getSplineBasis(data.frame(list(latitude=gpsDat$lat)), nKnots=nKnotsVar, latRange=latRange)
+  sdBasisX = getSplineBasis(data.frame(list(latitude=gpsDat$lat)), nKnots=nKnotsVar, latRange=latRange)
+  sdBasisY = getSplineBasis(fault, nKnots=nKnotsVar, latRange=latRange)
   gammaBasis = getSplineBasis(data.frame(list(latitude=gpsDat$lat)), nKnots=nKnotsGamma, latRange=latRange)
   
   # combine the initial parameter guesses
