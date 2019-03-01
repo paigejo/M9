@@ -9,7 +9,7 @@ fitModelTMB = function(initParams, gpsDat=slipDatCSZ,
                        normalModel=TRUE, doHess=TRUE, corGPS=FALSE, finalFit=FALSE, 
                        diffGPSTaper=FALSE, nKnotsGPS=nKnots, reltol=1e-8, 
                        nKnotsGamma=7, nKnotsVar=5, 
-                       dStarGPS=dStar, seed=123) {
+                       dStarGPS=dStar, seed=123, debug=FALSE) {
   
   # get input parameters
   out = getInputPar(initParams, fault, gpsDat, nKnots, diffGPSTaper=FALSE, nKnotsGPS, taperedGPSDat=TRUE, 
@@ -101,9 +101,11 @@ fitModelTMB = function(initParams, gpsDat=slipDatCSZ,
   
   # combine the initial parameter guesses
   
-  
   # compile the function and its gradient
-  compile("fitModelTMB.cpp")
+  if(!debug)
+    compile("fitModelTMB.cpp")
+  else
+    compile("fitModelTMB.cpp","-O0 -g")
   dyn.load(dynlib("fitModelTMB"))
   set.seed(seed)
   data <- list(y=y, x=x, lambdaBasisY=lambdaBasisY, lambdaBasisX=lambdaBasisX, DSStrikeCSZ=DSStrikeCSZ, 
@@ -137,7 +139,7 @@ getInitialParameters = function() {
   c(20, 15, rep(0, 4), 1, rep(0, 4), 1, rep(0, 6), 1, 1, 175, 1)
 }
 
-test = fitModelTMB(getInitialParameters())
+test = fitModelTMB(getInitialParameters(), debug=TRUE)
 
 
 
