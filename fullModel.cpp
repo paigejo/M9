@@ -47,11 +47,8 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(dStarGPS);
   
   PARAMETER(logmu);
-  PARAMETER(betaTaperIntercept);
   PARAMETER_VECTOR(betaTaper);
-  PARAMETER(betasdIntercept);
   PARAMETER_VECTOR(betasd);
-  PARAMETER(betaGammaIntercept);
   PARAMETER_VECTOR(betaGamma);
   PARAMETER(logphi);
   PARAMETER(logalpha);
@@ -60,6 +57,9 @@ Type objective_function<Type>::operator() ()
   
   int nx = x.size();
   int ny = y.size();
+  int nTaper = betaTaper.size();
+  int nsd = betasd.size();
+  int nGamma = betaGamma.size();
   
   // Outline: 
   // reparameterize
@@ -83,18 +83,6 @@ Type objective_function<Type>::operator() ()
   vector<Type> sdVecY = sdBasisY * betasd;
   vector<Type> gammaVec = gammaBasis * betaGamma;
   
-  // add in intercepts
-  for(int i=0; i<lambdaVecX.size(); i++)
-    lambdaVecX(i) = lambdaVecX(i) + betaTaperIntercept;
-  for(int i=0; i<lambdaVecY.size(); i++)
-    lambdaVecY(i) = lambdaVecY(i) + betaTaperIntercept;
-  for(int i=0; i<sdVecX.size(); i++)
-    sdVecX(i) = sdVecX(i) + betasdIntercept;
-  for(int i=0; i<sdVecY.size(); i++)
-    sdVecY(i) = sdVecY(i) + betasdIntercept;
-  for(int i=0; i<gammaVec.size(); i++)
-    gammaVec(i) = gammaVec(i) + betaGammaIntercept;
-  
   // reparameterize standard deviation and gamma
   for(int i=0; i<sdVecX.size(); i++)
     sdVecX(i) = exp(sdVecX(i));
@@ -103,24 +91,9 @@ Type objective_function<Type>::operator() ()
   for(int i=0; i<gammaVec.size(); i++)
     gammaVec(i) = exp(gammaVec(i));
   
-  // now that we are done reparameterizing, print out the parameters
-  ADREPORT(mu);
-  ADREPORT(betasdIntercept);
-  for(int i=0; i<betasd.size(); i++)
-    ADREPORT(betasd(i));
-  ADREPORT(betaTaperIntercept);
-  for(int i=0; i<betaTaper.size(); i++)
-    ADREPORT(betaTaper(i));
-  ADREPORT(betaGammaIntercept);
-  for(int i=0; i<betaGamma.size(); i++)
-    ADREPORT(betaGamma(i));
-  ADREPORT(lowInflate);
-  ADREPORT(highInflate);
-  ADREPORT(phi);
-  ADREPORT(alpha);
-  
   // construct taper values
   vector<Type> taperX(nx);
+  REPORT(mu)
   for(int i=0; i<lambdaVecX.size(); i++)
     taperX(i) = taper(xDepths(i), lambdaVecX(i), dStarGPS);
   
