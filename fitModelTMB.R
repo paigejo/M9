@@ -1,5 +1,5 @@
 library(TMB)
-# source("setup.R")
+source("setup.R")
 
 # fits the combined model with normalized taper using TMB jointly with the variance inflation 
 # parameters as well as the gamma spline parameters
@@ -184,7 +184,7 @@ getInitialParameters = function(nKnots=5, nKnotsVar=5, nKnotsGamma=7, logScale=F
   out
 }
 
-# test = fitModelTMB(getInitialParameters(), debug=TRUE)
+test = fitModelTMB(debug=TRUE)
 
 
 
