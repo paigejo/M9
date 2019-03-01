@@ -619,7 +619,7 @@ getSigmaY = function(params, G=NULL, nKnots=5, normalizeTaper=TRUE, subDat=dr1,
   tvec = taper(cszDepths, lambda=lambda, alpha=2, normalize=normalizeTaper, dStar=dStar)
   
   # now ready to compute SigmaY
-  out = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, covMatCSZ, G, tvec, 
+  out = estSubsidenceMeanCov(muZeta, lambda, covMatCSZ, G, tvec, 
                              fault=fault, subDat=subDat, normalModel=normalModel)
   SigmaY = out$Sigma
   diag(SigmaY) = diag(SigmaY) + subDat$Uncertainty^2
@@ -845,7 +845,7 @@ subLnLikGradTest = function(params, G=NULL, tvec=NULL,
   tvec = taper(fault$depth, lambda=lambda, alpha=2, normalize=normalizeTaper, dStar=dStar)
   
   # get Y MVN approximation
-  out = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, covMatCSZ, G, tvec, normalModel=normalModel)
+  out = estSubsidenceMeanCov(muZeta, lambda, covMatCSZ, G, tvec, normalModel=normalModel)
   SigmaY = out$Sigma
   diag(SigmaY) = diag(SigmaY) + subDat$Uncertainty^2
   expectY = out$mu
@@ -1022,7 +1022,7 @@ getQY = function(params, Xi, G, fauxG, subDat=dr1, fauxObs=getFauxObs(), fault=c
   covMatCSZ = sigmaZeta^2 * corMatCSZ
   
   # This is the key step: approximate G %*% T %*% Zeta with a MVN
-  mvnApprox = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, covMatCSZ, fullG, subDat=fullDat, 
+  mvnApprox = estSubsidenceMeanCov(muZeta, lambda, covMatCSZ, fullG, subDat=fullDat, 
                                    tvec=tvec)
   mu = -mvnApprox$mu # MUST TAKE NEGATIVE HERE, SINCE SUBSIDENCE NOT UPLIFT!!!!
   Sigma = mvnApprox$Sigma

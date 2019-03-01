@@ -25,7 +25,7 @@ genLogMuSigma = function(mu, Sigma) {
 # Here SigmaZeta is for the csz fault geometry GP areal covariance matrix (for LOG 
 # of zeta). setEventsIndep sets covariance elements from different events to be 
 # independent.  subDat is the subsidence dataset used to generate G
-estSubsidenceMeanCov = function(muZeta, lambda, sigmaZeta=NULL, SigmaZeta, G, tvec=NULL, 
+estSubsidenceMeanCov = function(muZeta, lambda, SigmaZeta, G, tvec=NULL, 
                                 setEventsIndep=TRUE, fault=csz, subDat=dr1, normalModel=FALSE, 
                                 dStar=28000, normalizeTaper=TRUE) {
   
@@ -131,7 +131,7 @@ getSubsidenceVarianceMat = function(params, fault = faultGeom, G = NULL, nDown=9
   }
   else
     SigmaZeta = arealZetaCov(params, fault, nDown1=nDown, nStrike1=nStrike)
-  slipParams = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaZeta, G, tvec, subDat=subDat)
+  slipParams = estSubsidenceMeanCov(muZeta, lambda, SigmaZeta, G, tvec, subDat=subDat)
   Sigma = slipParams$Sigma
   
   # add measurement variance
@@ -456,18 +456,100 @@ getPosNormMu = function(muZeta, covMatCSZ, startN=20, initNewMu=mean(muZeta)) {
 }
 
 # helper function for getPosNormMuN
-getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=mean(muZeta), extraFac=1) {
+# nMCBase: the number of MC simulations when muDiff == .01
+getPosNormMuN = function(muZeta, covMatCSZ, n=10, newMuInit=mean(muZeta), extraFac=1, doMC=TRUE, nMCBase=10000) {
   sigmaTest = covMatCSZ[1:n,1:n]
+  nMCFun = function(lastsd=NULL) {
+    
+    if(is.null(lastsd)) {
+      # base case
+      nMCBase
+    } else {
+      # assume 1/sd is proportional to square root of n, and ensure a certain amount of precision to start
+      # min(c(max(c(5000, round((nMCBase * .01^2) / muDiff^2))), 100000))
+      
+      # assume 1/sd is proportional to square root of n 
+      ceiling((lastsd / .01)^2)
+    }
+  }
   
   newMu = newMuInit
   muDiff = Inf
   lastMuDiff=NULL
+  lastsd = NULL
   while(abs(muDiff) > .01) {
     meanTest = rep(newMu, n)
-    out <- mtmvnorm(mean=meanTest, sigma=sigmaTest, lower=rep(0, n), doComputeVariance = FALSE)
-    adjustedMu = mean(out$tmean)
+    if(!doMC) {
+      out <- mtmvnorm(mean=meanTest, sigma=sigmaTest, lower=rep(0, n), doComputeVariance = FALSE)
+      adjustedMu = mean(out$tmean)
+    }
+    else {
+      L = t(chol(sigmaTest))
+      nsim = nMCFun(lastsd)
+      notAllPos=TRUE
+      nNewSims = nsim
+      zetaSims = matrix(-1, nrow=nrow(L), ncol=nsim) # multiply by two for consistency with Stan MCMC results
+      while(notAllPos) {
+        # generate simulations until all slips are positive, if necessary
+        # can check probability of generating all positive simulation with this code:
+        # library(mvtnorm)
+        # pmvnorm(upper=rep(0, nrow(csz)), mean=muc[-(1:nrow(gpsDat))], sigma=Sigmac[-(1:nrow(gpsDat)),-(1:nrow(gpsDat))])
+        negCol = function(simCol) {
+          any(simCol < 0)
+        }
+        negCols = apply(zetaSims, 2, negCol)
+        if(nNewSims != sum(negCols)) {
+          nNewSims = sum(negCols)
+          print(paste0("number of simulations remaining: ", nNewSims, "/", nsim))
+        }
+        
+        # simulate a bunch and take any sims that are positive
+        zSims = matrix(rnorm(nsim*nrow(L)), nrow=nrow(L), ncol=nsim)
+        thisZetaSims = sweep(L %*% zSims, 1, newMu, "+") # add muZeta to each zero mean simulation
+        thisPosCols = which(!apply(thisZetaSims, 2, negCol))
+        
+        if(length(thisPosCols) > nNewSims) {
+          zetaSims[,negCols] = thisZetaSims[,thisPosCols[1:nNewSims]]
+        }
+        else if(length(thisPosCols) > 0) {
+          negColsI = which(negCols)
+          zetaSims[,negColsI[1:length(thisPosCols)]] = thisZetaSims[,thisPosCols]
+        }
+        
+        notAllPos =  any(zetaSims < 0)
+      }
+      adjustedMu = mean(zetaSims)
+      lastsd = sd(colMeans(zetaSims))
+    }
     muDiff = adjustedMu - mean(muZeta)
-    newMu = newMu - muDiff*extraFac
+    
+    # adjust the mean based on modifications to the marginals of the Gaussian
+    adjustMu = function(muZeta, adjustedMu, newMu) {
+      muDiffs = adjustedMu - muZeta
+      sds = sqrt(diag(sigmaTest))
+      mainMu = mean(muZeta)
+      mainSD = mean(sds)
+      
+      optimFun = function(delta) {
+        # F
+        cdf = function(x) {
+          (pnorm(x, mean=mainMu, sd=mainSD) - pnorm(0, mean=mainMu, sd=mainSD)) / (1 - pnorm(0, mean=mainMu, sd=mainSD))
+        }
+        # F(muDiff + delta)
+        C = cdf(mean(muDiffs) + delta)
+        
+        # integrate survival to get expectation
+        int = integrate(function(x) {1 - cdf(x)}, lower = 0, upper=mean(muDiffs) + delta)
+        newMean = (1 / (1 - C)) * (adjustedMu - int$value)
+        (newMean - mainMu)^2
+      }
+      opt = optim(0, optimFun)
+      finalDiff = mean(muDiffs + opt$par)
+      newMu = newMu - finalDiff
+      newMu
+    }
+    # newMu = newMu - muDiff*extraFac
+    newMu = adjustMu(muZeta, adjustedMu, newMu)
     
     # for linear extrapolation, extraFac=1, otherwise, usually must be larger for faster convergence
     if(!is.null(lastMuDiff))

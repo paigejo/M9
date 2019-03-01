@@ -1,47 +1,82 @@
-This is BibTeX, Version 0.99d (TeX Live 2016)
-Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+This is BibTeX, Version 0.99d (TeX Live 2018)
+Capacity: max_strings=100000, hash_size=100000, hash_prime=85009
 The top-level auxiliary file: template.aux
 The style file: spbasic.bst
-Database file #1: cascadiaEQs.bib
+I found no \bibdata command---while reading file template.aux
+Warning--I didn't find a database entry for "mccaffrey2013"
+Warning--I didn't find a database entry for "wang2013"
+Warning--I didn't find a database entry for "stein2012"
+Warning--I didn't find a database entry for "witter2013"
+Warning--I didn't find a database entry for "minson2013"
+Warning--I didn't find a database entry for "duputel2015"
+Warning--I didn't find a database entry for "CasellaBerger"
+Warning--I didn't find a database entry for "leonard2010"
+Warning--I didn't find a database entry for "steinBook"
+Warning--I didn't find a database entry for "handbook"
+Warning--I didn't find a database entry for "evans2015"
+Warning--I didn't find a database entry for "wang2012"
+Warning--I didn't find a database entry for "pollitz2017"
+Warning--I didn't find a database entry for "GPS1"
+Warning--I didn't find a database entry for "GPS2"
+Warning--I didn't find a database entry for "GPS3"
+Warning--I didn't find a database entry for "GPS4"
+Warning--I didn't find a database entry for "GPS5"
+Warning--I didn't find a database entry for "GPS6"
+Warning--I didn't find a database entry for "GPS7"
+Warning--I didn't find a database entry for "faultGeom"
+Warning--I didn't find a database entry for "faultGeom2"
+Warning--I didn't find a database entry for "leveque2016"
+Warning--I didn't find a database entry for "melgar2016"
+Warning--I didn't find a database entry for "hazardMaps2014"
+Warning--I didn't find a database entry for "geoclaw"
+Warning--I didn't find a database entry for "okada"
+Warning--I didn't find a database entry for "goldfinger2012"
+Warning--I didn't find a database entry for "BFGS"
+Warning--I didn't find a database entry for "kriging"
+Warning--I didn't find a database entry for "clarkeCarver1992"
+Warning--I didn't find a database entry for "palacios2006non"
+Warning--I didn't find a database entry for "stickBreaking"
+Warning--I didn't find a database entry for "slabGeom"
 Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
-You've used 33 entries,
+You've used 0 entries,
             3270 wiz_defined-function locations,
-            894 strings with 12398 characters,
-and the built_in function-call counts, 54506 in all, are:
-= -- 5939
-> -- 1496
-< -- 14
-+ -- 669
-- -- 480
-* -- 4072
-:= -- 6292
-add.period$ -- 33
-call.type$ -- 33
-change.case$ -- 317
-chr.to.int$ -- 33
-cite$ -- 33
-duplicate$ -- 5402
-empty$ -- 4063
-format.name$ -- 585
-if$ -- 11312
+            715 strings with 5196 characters,
+and the built_in function-call counts, 35 in all, are:
+= -- 0
+> -- 0
+< -- 0
++ -- 0
+- -- 0
+* -- 2
+:= -- 8
+add.period$ -- 0
+call.type$ -- 0
+change.case$ -- 0
+chr.to.int$ -- 0
+cite$ -- 0
+duplicate$ -- 0
+empty$ -- 1
+format.name$ -- 0
+if$ -- 1
 int.to.chr$ -- 1
 int.to.str$ -- 1
-missing$ -- 408
-newline$ -- 109
-num.names$ -- 132
-pop$ -- 1606
+missing$ -- 0
+newline$ -- 10
+num.names$ -- 0
+pop$ -- 0
 preamble$ -- 1
-purify$ -- 289
+purify$ -- 0
 quote$ -- 0
-skip$ -- 1900
+skip$ -- 1
 stack$ -- 0
-substring$ -- 5504
-swap$ -- 2775
-text.length$ -- 3
+substring$ -- 0
+swap$ -- 0
+text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 282
+type$ -- 0
 warning$ -- 0
-while$ -- 353
+while$ -- 0
 width$ -- 0
-write$ -- 369
+write$ -- 9
+(There was 1 error message)

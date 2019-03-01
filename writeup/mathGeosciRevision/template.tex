@@ -267,29 +267,24 @@ There is risk of a magnitude 9 earthquake on the Cascadia Subduction Zone, yet f
 \label{intro}
 Seismic hazard studies strive to estimate what the next large earthquake will look like on a fault system in order to better understand the likely impacts to regional communities and to aid in mitigation planning.  An estimation of the hazard is typically accomplished by using the crustal strain to constrain the spatial distribution and magnitude of locking on the fault as in \citet{mccaffrey2013}, or by using the earthquake history inferred from paleoseismic data as in \citet{wang2013}.  However, observations of contemporary strain or records of past coseismic events are not necessarily a direct proxy for a future earthquake given the variability of rupture scenarios from one event to the next on the same fault \citet{stein2012}.  An alternative approach utilizes a logic tree, where various rupture scenarios are assigned and weighted, to produce a probabilistic estimate of likely outcomes \citep{witter2013}.  However, these trees are often limited to a small number of predetermined scenarios, can be ad-hoc, and likely do not capture the full range of possible events.
 
-A more robust approach to estimate the seismic hazard is to develop a statistical model of fault rupture that incorporates the actual variability of past rupture events.  In this work, we present an approach for constructing a fully probabilistic coseismic slip model using likelihood-based methods.  A likelihood-based model in this context is one that involves a likelihood function giving the relative probabilities of observing the data given the model parameters such as in \citep{minson2013, duputel2015}.  Likelihood-based models are widely preferred among statisticians for their many useful properties, including providing theoretical frameworks for estimating parameter and observation uncertainty, and accounting for correlations in the data \citep[Ch. 6-10]{CasellaBerger}.  We apply this technique to the Cascadia Subduction Zone (CSZ), which has one of the most detailed rupture histories of any fault system given the rich paleoseismic record \citep{leonard2010}.  This setting is ideal for likelihood-based models, since although the historical record is long, it has large uncertainty and is highly correlated in space.  We use two disparate, but complimentary data sources to constrain the statistical model of fault slip and produce estimated uncertainties: (1) paleoseismic data from along the coastline that record the magnitude of subsidence for 21 previous coseismic events, and (2) the contemporary fault locking rate distribution on the megathrust that is derived from GPS data.  This statistical slip model can be used predict the slip distribution of a future megathrust event, or conditioned on data to estimate the slip distribution of past coseismic events. 
+A more robust approach to estimate the seismic hazard is to develop a statistical model of fault rupture that incorporates the actual variability of past rupture events.  In this work, we present an approach for constructing a fully probabilistic coseismic slip model using likelihood-based methods.  A likelihood-based model in this context is one that involves a likelihood function giving the relative probabilities of observing the data given the model parameters such as in \citep{minson2013, duputel2015}.  Likelihood-based models are widely preferred among statisticians for their many useful properties, including providing theoretical frameworks for estimating parameter and observation uncertainty, and accounting for correlations in the data \citep[Ch. 6-10]{CasellaBerger}.  We apply this technique to the Cascadia Subduction Zone (CSZ), which has one of the most detailed rupture histories of any fault system given the rich paleoseismic record \citep{leonard2010}.  This setting is ideal for likelihood-based models, since although the historical record is long, it has large uncertainty and is highly correlated in space.  We use two disparate, but complimentary data sources to constrain the statistical model of fault slip and produce estimated uncertainties: (1) paleoseismic data from along the coastline that record the magnitude of subsidence for 21 previous coseismic events, and (2) the contemporary fault locking rate distribution on the megathrust that is derived from GPS data.  This statistical slip model can be used to predict the slip distribution of a future megathrust event, or conditioned on data to estimate the slip distribution of past coseismic events. 
 
-One class of spatial statistical models that is fully likelihood-based is known as stochastic process models, and the most common stochastic processes used to model spatial data are known as Gaussian processes.  Using Gaussian processes or other stochastic process models for spatial data inherently involves spatial correlations: nearby data are often more similar than far away data.  This is modeled using a correlation function, often denoted in the isotropic (direction-independent) case by $\rho(d)$ for some distance $d$.  Let $Z(\vec{x}) \in \mathbb{R}$ be the value of a Gaussian process $Z$ at location $\vec{x} \in \mathbb{R}^2$.  Since $Z$ is a Gaussian process, if $Z$ has correlation function $\rho(\cdot)$, mean $\vec{\mu}$, and variance $\sigma^2$, then the joint distribution of $Z$ at multiple locations, $\vec{x}_1, ..., \vec{x}_n$, is the following multivariate normal distribution:
+One class of spatial statistical models that is fully likelihood-based is known as stochastic process models, and the most common stochastic processes used to model spatial data are Gaussian processes.  Using Gaussian processes or other stochastic process models for spatial data inherently involves leveraging spatial correlations to borrow strength from nearby data.  Correlations are often modeled as a function of distance, say $\rho(d)$.  Let $Z(\vec{x}) \in \mathbb{R}$ be the value of a Gaussian process $Z$ at location $\vec{x} \in \mathbb{R}^2$ with correlation function $\rho(\cdot)$ and variance $\sigma^2$. Then the joint distribution of $Z$ at multiple locations, $\vec{x}_1, ..., \vec{x}_n$, takes the following form if the mean at those locations is $\vec{\mu}$ :
 $$ \begin{pmatrix}
 Z(\vec{x}_1) \\
 Z(\vec{x}_2) \\
 \vdots \\
 Z(\vec{x}_n) \\
 \end{pmatrix} \sim \MVN{\vec{\mu}, \sigma^2 \mbf{C}} $$
-where $\mbf{C}$ is a correlation matrix with elements $C_{ij} = \rho(\norm{\vec{x}_i - \vec{x}_j})$.  The Gaussian process parameters can be estimated with maximum (log) likelihood or by maximizing the posterior probability of the model parameters in a Bayesian setting.  The log likelihood of an $n$-dimensional multivariate Gaussian random variable takes the following form for a set of observations, $\vec{Z}$, if the observations' mean vector and covariance matrix are $\vec{\mu}$ and $\mbf{\Sigma} = \sigma^2 \mbf{C}$ respectively:
-\begin{equation}
-\mcal{L}(\vec{\mu}, \mbf{\Sigma} ; \vec{Z}) = -n\log(\pi) - (\vec{Z} - \vec{\mu})^T \mbf{\Sigma}^{-1} (\vec{Z} - \vec{\mu}) - \log(|\mbf{\Sigma}|)
-\label{normalLik}
-\end{equation}
-where $|\cdot|$ denotes the matrix determinant.
+where $\mbf{C}$ is a correlation matrix with elements $C_{ij} = \rho(\norm{\vec{x}_i - \vec{x}_j})$.
 
-Under most models, $\vec{\mu}$ and $\mbf{\Sigma}$ have relatively simple forms depending on a small set of model parameters over which the log likelihood or posterior probability is maximized.  For instance, if we take $\rho(d)$ to be a Matern correlation function, which is perhaps the most widely used family of spatial correlation functions due to its flexibility, then it takes the following form:
+Under most models, $\vec{\mu}$ and $\mbf{C}$ have relatively simple forms depending on a small set of model parameters.  For instance, the Mat\'{e}rn correlation function is perhaps the most widely used family of spatial correlation functions due to its simplicity and flexibility, and it takes the following form:
 $$ \rho(d; \nu, \phi) = \frac{\pi^{1/2} \phi^{2\nu}}{2^{\nu - 1} \Gamma(\nu + 1/2)} (|d|/\phi)^{\nu} \mcal{K}_\nu(|d|/\phi) $$
-based on the formulation from page 31 of \citet{steinBook}, where $\phi$ is the spatial scale parameter, $\nu$ is a smoothness parameter, and $\mcal{K}_\nu(\cdot)$ is a modified Bessel function of the second kind or order $\nu$.  Since the $\nu$ parameter is poorly identified \citep[Ch. 1.3]{handbook}, we will fix $\nu=3/2$, in which case the correlation function takes the following simplified form:
+where $\phi$ is the spatial scale parameter, $\nu$ is a smoothness parameter, and $\mcal{K}_\nu(\cdot)$ is a modified Bessel function of the second kind or order $\nu$ \citep[p.31]{steinBook}.  Since the $\nu$ parameter is poorly identified \citep[Ch. 1.3]{handbook}, we fix $\nu=3/2$, in which case the we get the following simplified form:
 $$ \rho(d; \nu=\frac{3}{2}, \phi) = \paren{1 + \frac{d}{\phi}} \exp{-\frac{d}{\phi}}. $$
 This is faster to compute and has a closed form for its gradient with respect to $\phi$, which allows for more robust model fitting.
 
-The observations corresponding to $\vec{Z}$ above will be the paleoseismic subsidence and fault locking rate estimates from \citet{leonard2010} and \citet{evans2015} respectively.  Paleoseismic subsidence estimates are based on macro- and microfossil evidence in the soil of coastal marshes and estuaries.  Not everywhere all locations along the coast are suitable for collecting such data---interseismic uplift of sandy soils can complicate the preservation of paleoseismic evidence \citep{leonard2010}.  Determining uncertainties of subsidence estimates can be particularly hard, since it can be challenging or impossible to separate coseismic and postseismic deformation \citep{wang2012, wang2013}.  Qualities of estimates may be highly variable, depending on all these factors.  Hence, uncertainties are likely underestimated.  In order to account for this, additional parameters are included in the proposed models in order to estimate by what factor, on average, uncertainties are over- or underestimated.  The fitted values of these parameters may be of independent scientific interest.
+Paleoseismic subsidence estimates are based on macro- and microfossil evidence in the soil of coastal marshes and estuaries.  Not all locations along the coast are suitable for collecting such data---interseismic uplift of sandy soils can complicate the preservation of paleoseismic evidence \citep{leonard2010}.  Determining uncertainties of subsidence estimates can be particularly hard, since it can be challenging or impossible to separate coseismic and postseismic deformation \citep{wang2012, wang2013}.  Qualities of estimates may be highly variable, depending on all these factors.  Hence, uncertainties are likely underestimated.  In order to account for this, additional parameters are included in the proposed models in order to estimate by what factor, on average, uncertainties are over- or underestimated.  The fitted values of these parameters may be of independent scientific interest.
 
 To constrain the contemporary fault locking rate on the Cascadia megathrust, we use the spatial locking rate data product estimated from \citep{pollitz2017}, who constrained their model using surface deformation captured by GPS data from the last three decades combined from several sources: \citet{GPS1}, \citet{GPS2}, \citet{GPS3}, \citet{GPS4}, \citet{GPS5}, \citet{GPS6}, and \citet{GPS7}.  The data are summarized in \citet{evans2015}.  Since the dataset is representative of the integrated locking rates over the last three decades, it is not necessarily proportional to the full amount of locking accumulated over the CSZ megathrust since the 1700 earthquake \citep{wang2012}.  Hence, estimates of the locking rates and their uncertainties may have inaccuracies, and should not be considered more similar to a future Cascadia earthquake than any past subduction event.
 
@@ -303,7 +298,7 @@ There are three distinct datasets used in this analysis: paleoseismic subsidence
 
 \subsection{Data}
 \label{data}
-Paleoseismic data provide a record of a past coseismic event as in \citet{leonard2010}.  In a subduction zone setting, this can include the deposition of sediment along the coast associated with the lowering of the ground relative to mean sea level and/or inundation of sediment-laden seawater with a tsunami, among other possible geological evidence.  The paleoseismic data from \citet{leonard2010} contains subsidence estimates, uncertainties, a `quality' indicator, latitude and longitude coordinates, an associated site, and an associated earthquake event, such as the 1700 event, for example.  The quality indicator is an integer ranging from 1 to 3 depending on whether the estimate is based on whether the estimate is based on micro- or macro-fossil analyses and the type of macro-fossil analysis, where micro-fossil analysis are considered to be higher quality.  Some estimates do not have associated uncertainties, and others do not have associated earthquakes, instead containing a subsidence estimate for an unknown past earthquake.  The data are first culled so that any estimates without a specified earthquake event, subsidence, or uncertainty are removed.  The resulting dataset contains 523 subsidence estimates ranging in time from the most recent 1700 event to earthquakes occurring nearly 7,000 years ago.  While 196 of these are from the 1700 event, the majority are from older earthquakes.  The data is shown in Fig. \ref{subsidence}.  All data and code for this analysis is available at Paige's Github at \url{https://github.com/paigejo/M9}.
+Paleoseismic data provide a record of a past coseismic event as in \citet{leonard2010}.  In a subduction zone setting, this can include the deposition of sediment along the coast associated with the lowering of the ground relative to mean sea level and/or inundation of sediment-laden seawater with a tsunami, among other possible geological evidence.  The paleoseismic data from \citet{leonard2010} contains subsidence estimates, uncertainties, a `quality' indicator, latitude and longitude coordinates, an associated site, and an associated earthquake event, such as the 1700 event, for example.  The quality indicator is an integer ranging from 1 to 3 depending on whether the estimate is based on micro- or macro-fossil analyses and the type of macro-fossil analysis, where micro-fossil analysis are considered to be higher quality.  Some estimates do not have associated uncertainties, and others do not have associated earthquakes, instead containing a subsidence estimate for an unknown past earthquake.  The data are first culled so that any estimates without a specified earthquake event, subsidence, or uncertainty are removed.  The resulting dataset contains 523 subsidence estimates ranging in time from the most recent 1700 event to earthquakes occurring nearly 7,000 years ago.  While 196 of these are from the 1700 event, the majority are from older earthquakes.  The data is shown in Fig. \ref{subsidence}.  All data and code for this analysis is available at Paige's Github at \url{https://github.com/paigejo/M9}.
 
 \begin{figure}
 \centering
@@ -325,11 +320,11 @@ Different fault geometries for the CSZ megathrust lead to different surface defo
 
 \subsection{A spatial statistical model for full-margin earthquake slip}
 \label{model}
-As in many previous studies (e.g. \citet{leonard2010, leveque2016, melgar2016}) we assume a taper function such that average slip on the fault tapers to zero at its down-dip limit, which we assume is at depth 25km to allow flexibility in the taper while not being too much deeper than the fault geometry, avoiding drastic slip discontinuities as the edges of the fault geometry.  This down-dip slip limit is similar to the one weighted most highly in \citet[p. 98-99]{hazardMaps2014}, which used an estimated contour of 1cm/year locking rate for its down-dip slip limit.  While some studies such as \citet{evans2015} and \citet{wang2013} assume two scenarios---one with the up-dip fault margin fully locked and one with the margin only partially locked---we assume the former for simplicity, and note that alternative scenarios should be considered in the future.  We assume a normalized double exponential taper taking the form:
+As in many previous studies (e.g. \citet{leonard2010, leveque2016, melgar2016}) we model coseismic slips as a function of depth using a taper function such that average slip on the fault approaches zero at its down-dip limit. We assume a down dip slip limit at depth 25km to allow flexibility in the taper while not being too much deeper than the fault geometry, avoiding drastic slip discontinuities at the edges of the fault geometry.  This down-dip slip limit is similar to the highest weighted one in \citet[p. 98-99]{hazardMaps2014}, which used an estimated contour of 1cm/year locking rate for its down-dip slip limit.  We assume a normalized double exponential taper taking the form:
 \begin{equation}
 t(d; \lambda) = 1 - \dfrac{1 - \exp{-(d/d^*)^2 \lambda^2}}{1 - e^{-\lambda^2}} \label{taperDef} 
 \end{equation}
-so that the taper function smoothly varies from 1 at a depth of zero to 0 at the fixed fault down-dip slip limit $d^*$.  Here $d$ is the depth of the subfault centroid.  The parameter $\lambda$ is a rate that determines how quickly the slip tapers to zero.  The taper function is shown for different values of $\lambda$ in Figure \ref{taper}.  As $\lambda \to 0$, a straightforward application of l'H\^{o}pital's rule shows $\lim_{\lambda \to 0} t(d; \lambda) = 1-(d/d^*)^2$, which can be used to improve numerical accuracy for small values of $\lambda$.
+so that the taper function smoothly varies from 1 at a depth $d$ of zero to 0 at the fixed fault down-dip slip limit $d^*$.  The parameter $\lambda$ is a rate that determines how quickly the the tapering occurs.  The taper function is shown for different values of $\lambda$ in Figure \ref{taper}.
 
 \begin{figure}
 \centering
@@ -340,7 +335,7 @@ so that the taper function smoothly varies from 1 at a depth of zero to 0 at the
 
 In order to account for the latitudinal variability in the subsidence observations, $\lambda$ is chosen to be a nonparametric function of latitude based on a five knot B-spline basis expansion:
 $$ \vec{\lambda} = \mbf{\Xi} \vec{\beta} $$
-Here, $\vec{\lambda}$ is the vector of taper rate parameters associated with the $r$ grid cells in the fault geometry, and $\mbf{\Xi}$ is the B-spline basis matrix evaluated at the associated latitude values of those grid cells.  Note that $\vec{\beta}$ is a $p$-vector of coefficients for the B-splines forming the columns of $\mbf{\Xi}$ with $p=5$ in this analysis.  Although we explored other basis functions and numbers of basis elements, we chose this basis due to its simplicity and stability over the latitudinal range of the data.  Since there are large gaps in the subsidence data, using too many basis elements resulted in nearly unidentifiable models and unstable results.  The basis functions chosen are shown in Figure \ref{splineBasis}.  Note that the chosen basis functions are symmetric in latitude, since the function space spanned by these elements is the same as the space spanned by replacing the constant basis function with a reflection of the magenta basis element around $45^\circ$ latitude.
+Here, $\vec{\lambda}$ is the vector of five taper rate parameters associated with the $r$ grid cells in the fault geometry, and $\mbf{\Xi}$ is the B-spline basis matrix evaluated at the associated latitude values of those grid cells.  Although we explored other basis functions and numbers of basis elements, we chose this basis due to its simplicity and stability over the latitudinal range of the data.  The basis functions are shown in Figure \ref{splineBasis}.
 
 \begin{figure}
 \centering
@@ -352,6 +347,13 @@ Here, $\vec{\lambda}$ is the vector of taper rate parameters associated with the
 We now model coeseismic slip as a fully stochastic spatial process.  Let $\vec{S}$ be the vector of fault slip at the grid cells of the CSZ fault geometry.  Then, letting $\mbf{T} = \text{diag}(\vec{t}(\vec{d}; \vec{\lambda}))$ be a diagonal taper matrix of taper function evaluations at each fault grid cell, we have:
 $$ \vec{S} = \mbf{T} \vec{Z} $$
 where $\vec{Z}$ is taken to be a vector of values of a stochastic process occurring on the fault geometry.  More specifically, $\vec{Z}$ represents untapered coseismic slip, and could be modeled as a Gaussian process, a Gaussian process truncated at zero to be nonnegative (a positive Gaussian process), a lognormal process, or some other stochastic process with the desired distributional model.  We chose Gaussian and positive Gaussian process models for simplicity and also because preliminary results suggested they performed significantly better than lognormal process models.  Moreover, we assume $\vec{Z}$ has mean $\mu_Z$, variance $\sigma_Z^2$, and Matern correlation function $\rho(\cdot ; \phi, 3/2)$ depending on distance scale parameter $\phi$.  Note that although $\mu_Z$ and $\sigma_Z$ are constant through space, the taper function induces nonstationarities in the marginal process mean and variance.  Furthermore, historical subsidence data can be used to estimate more flexible stochastic process distributions for past earthquakes as will be discussed in Sec. \ref{inferringSlips}.  It should also be noted that $\vec{S}$ as modeled here is much smoother than coseismic slips that might actually be observed, instead representing coseismic slip averaged (and therefore smoothed) over the fault geometry grid cells.
+
+In order to account for the different geological scales in the strike and the dip directions of the fault, we use a geometrically anisotropic model for the correlation function \citep[p. 39]{handbook}, where the distance $d$ used in the spatial correlation function is replaced with:
+\begin{align*}
+d(\vec{h}, \alpha ) &=  (\vec{h}^T A \vec{h})^{1 / 2} \\
+& \equiv  \sqrt{\alpha^2 h_{strike}^2 + \alpha^{-2} h_{dip}^2} 
+\end{align*}
+where $\vec{h}$ is the two-dimensional spatial lag vector with strike and dip coordinates and $A$ is a diagonal matrix with elements $ \alpha^2$ and $ \alpha^{-2}$ in the diagonal. We compute the along dip and strike coordinates by first projecting the latitude and longitude coordinates using a Lambert projection with parameters chosen to best approximate spherical distance. After projecting the coordinates, we use Principal Component Analysis (PCA) to compute the major and minor elliptical axes of the fault geometry, respectively representing strike and dip axes of the fault. We then project the coordinates onto these axes to get the strike and dip coordinates. Although we explored other methods to compute strike and dip coordinates such as that used in Clawpack \citep{clawpack}, we we chose this method since the results in a positive semi definite covariance function, which is required to compute the likelihood of our model.
 
 The model for the data is based on $\vec{X}$, the vector of GPS-based locking rate estimates, and $\vec{Y}_i$, the vector of subsidence observations corresponding to historical earthquake, $i$, and is as follows:
 \begin{align}
@@ -388,7 +390,7 @@ We can apply this same formula whether considering $S$ to denote the stochastic 
 
 It is important to note that, for ill-posed problems where the observations do not provide enough information about the model, the matrix $\mbf{\Sigma}_D$ is singular or near-singular.  Since paleoseismic subsidence is only measured along the coast and represent an integration of coseismic slip across the fault, they are unable to fully discern different types of earthquakes without certain modeling constraints.  This is one reason we assume a down-sip slip limit of $d^*=25$km, although it is certainly possible to use more advanced constraints.
 
-Note that it is possible to produce negative slip under a Gaussian model.  Although in our predictions for the 1700 earthquake the probability of negative slip is quite low, it is not insignificant for earthquakes with little or no subsidence data present such as earthquakes in the future or far in the past.  It is, however, possible to throw out simulations with any negative slip, which corresponds to using a truncated Gaussian process.  In fact, a simple proof given in Appendix A shows that the predictive distribution for a truncated Gaussian process is simply the predictive distribution for a Gaussian process, truncated (although the proof applies to any truncated distribution).  Hence, drawing from the closed form Gaussian predictive distribution and then throwing out simulations that contain any negative value is equivalent to drawing from the truncated Gaussian process predictive distribution.  However, it is recommended that those using this model take care when throwing out simulations with negative values or setting negative slip to zero, especially when there is a significant probability of negative slip.  Throwing simulations or setting negative slip to zero can raise the mean of the coseismic slip enough to bias the predictions.  Instead, if one is drawing a realization $\vec{Z}$, one can draw a realization from $(\vec{Z} - \delta)  \vert \set{\vec{Z} - \delta > \vec{0}}$ choosing $\delta$ such that the expectation is approximately equal to the untruncated expectation: $E[(\vec{Z} - \delta) \vert \set{(\vec{Z} - \delta) > \vec{0}}] \approx E[\vec{Z}]$, where $\set{\vec{Z} - \delta > \vec{0}}$ is the event that all elements of $\vec{Z} - \delta$ are positive.   Of course, this only accounts for biasing, and throwing out simulations with negative slip or setting negative slip to zero will also affect the process variance to a certain extent.
+Note that it is possible to produce negative slip under a Gaussian model.  Although in our predictions for the 1700 earthquake the probability of negative slip is quite low, it is not insignificant for earthquakes with little or no subsidence data present such as earthquakes in the future or far in the past.  It is, however, possible to throw out simulations with any negative slip, which corresponds to using a truncated Gaussian process.  In fact, a simple proof given in Appendix A shows that the predictive distribution for a truncated Gaussian process is simply the predictive distribution for a Gaussian process, truncated (although the proof applies to any truncated distribution).  Hence, drawing from the closed form Gaussian predictive distribution and then throwing out simulations that contain any negative value is equivalent to drawing from the truncated Gaussian process predictive distribution.  However, it is recommended that those using this model take care when throwing out simulations with negative values or setting negative slip to zero, especially when there is a significant probability of negative slip.  Throwing simulations or setting negative slip to zero can raise the mean of the coseismic slip enough to bias the predictions.  Instead, if one is drawing a realization $\vec{Z}$, one can draw a realization from $(\vec{Z} - \delta)  \vert \set{\vec{Z} - \delta > \vec{0}}$ choosing $\delta$ such that the expectation is approximately equal to the untruncated expectation: $E[(\vec{Z} - \delta) \vert \set{(\vec{Z} - \delta) > \vec{0}}] \approx E[\vec{Z}]$, where $\set{\vec{Z} - \delta > \vec{0}}$ is the event that all elements of $\vec{Z} - \delta$ are positive.   Of course, this only accounts for bias, and throwing out simulations with negative slip or setting negative slip to zero will also affect the process variance to a certain extent.
 
 \section{Application}
 \label{application}
@@ -404,42 +406,24 @@ Note that it is possible to produce negative slip under a Gaussian model.  Altho
   & \multicolumn{2}{c}{\textit{Combined Taper}} & \multicolumn{2}{c}{\textit{Separate Taper}} \\ 
  & Estimates & SEs & Estimates & SEs & Units \\ 
   \hline
-  \begin{comment}
-$\mu_Z$ & 16.814 & 1.419 & 16.386 & 0.426 \\ 
- $ \sigma_Z$ & 13.633 & 2.212 & 8.328 & 0.211 \\ 
-  $\gamma$ & 1.965 &  & 1.917 &  \\ 
-  $\beta_1$ & -1.168 & 0.004 & 6.436 & 0.088 \\ 
-  $\beta_2$ & -0.238 & 0.001 & -11.734 & 0.237 \\ 
-  $\beta_3$ & 3.871 & 0.019 & 0.274 & 0.006 \\ 
-  $\beta_4$ & 2.477 & 0.007 & -6.651 & 0.173 \\ 
-  $\beta_5$ & 1.005 & 0.006 & -1.385 & 0.027 \\ 
-  $\beta'_1$ &  &  & 6.177 & 0.098 \\ 
-  $\beta'_2$ &  &  & -14.225 & 0.274 \\ 
-  $\beta'_3$ &  &  & 6.552 & 0.212 \\ 
-  $\beta'_4$ &  &  & -10.723 & 0.262 \\ 
-  $\beta'_5$ &  &  & 0.046 & 0.002 \\ 
-  $\phi $& 153.037 & 8.663 & 129.767 & 2.292 \\ 
-  $\psi_l$ & 1.75 &  & 1.75 &  \\ 
-  $\psi_h$ & 1.25 &  & 1.25 &  \\ 
-  Log Likelihood & -714.04 & & -619.02 & \\
-  \end{comment}
-  $\mu_Z$ & 16.81 & 1.42 & 16.39 & 0.43 & m\\ 
- $ \sigma_Z$ & 13.63 & 2.212& 8.33 & 0.21 & m\\ 
-  $\gamma$ & 1.96 &  & 1.92 & & $10^{-3}$/yr \\ 
-  $\beta_1$ & -1.168 & 0.004 & 6.436 & 0.088 &  \\ 
-  $\beta_2$ & -0.238 & 0.001 & -11.734 & 0.237 & \\ 
-  $\beta_3$ & 3.871 & 0.019 & 0.274 & 0.006 & \\ 
-  $\beta_4$ & 2.477 & 0.007 & -6.651 & 0.173 & \\ 
-  $\beta_5$ & 1.005 & 0.006 & -1.385 & 0.027 & \\ 
-  $\beta'_1$ &  &  & 6.177 & 0.098 & \\ 
-  $\beta'_2$ &  &  & -14.225 & 0.274 & \\ 
-  $\beta'_3$ &  &  & 6.552 & 0.212 & \\ 
-  $\beta'_4$ &  &  & -10.723 & 0.262 & \\ 
-  $\beta'_5$ &  &  & 0.046 & 0.002 & \\ 
-  $\phi $& 153.0 & 8.7 & 129.8 & 2.3 & km \\ 
-  $\psi_l$ & 1.75 &  & 1.75 &  \\ 
-  $\psi_h$ & 1.25 &  & 1.25 &  \\ 
-  Log Likelihood & -714.04 & & -619.02 & \\
+  $\mu_Z$ & 17.546 & 1.816 & 16.527 & 1.548 & m \\ 
+  $\sigma_Z$ & 12.065 & 1.300 & 7.730 & 0.967 & m \\ 
+  $\gamma$ & 1.975 &  & 1.936 & & $10^{-3}$  \\ 
+  $\beta_1$ & -2.565 & 0.533 & 6.369 & 1.048 & \\ 
+  $\beta_2$ & 1.385 & 0.825 & -11.716 & 1.925 & \\ 
+  $\beta_3$ & 5.051 & 0.737 & 0.339 & 0.728 & \\ 
+  $\beta_4$ & 4.364 & 0.782 & -6.550 & 1.509 & \\ 
+  $\beta_5$ & 1.772 & 0.610 & -1.371 & 0.968 & \\ 
+  $\beta'_1$ &  &  & 5.524 & 1.466 & \\ 
+  $\beta'_2$ &  &  & -13.764 & 2.295 & \\ 
+  $\beta'_3$ &  &  & 7.543 & 1.378 & \\ 
+  $\beta'_4$ &  &  & -10.087 & 1.911&  \\ 
+  $\beta'_5$ &  &  & 0.586 & 1.429 & \\ 
+  $\phi$ & 143.068 & 6.081 & 127.167 & 5.656 & km \\ 
+  $\alpha$ & 1.204 & 0.028 & 1.165 & 0.027  & \\ 
+  $\psi_l$ & 1.750 &  & 1.750 & &  \\ 
+  $\psi_h$ & 1.250 &  & 1.250 &  & \\ 
+  Log Likelihood & -685.618 & & -598.599 & \\
    \hline
 \end{tabular}
 \caption{Model parameter MLEs and their standard errors for the combined and separated taper models.}
@@ -447,7 +431,7 @@ $\mu_Z$ & 16.814 & 1.419 & 16.386 & 0.426 \\
 \end{table}
 %\multicolumn{3}{c|}{\emph{Confidence intervals}}
 
-Fitting the combined model resulted in the parameter MLEs and standard errors given in Tab. \ref{dataStats}, where standard errors are calculated using the hessian of the log-likelihood function.  Table \ref{dataStats} shows that, for the combined and separate taper models, $\mu_Z$ is 16.814 and 16.386 meters respectively.  Similarly, the estimates for $\sigma_Z$ are 13.633 and 8.328 respectively, which, along with a highly significant $\chi^2$ test, indicates that allowing separate tapers seems to explain a large amount of variation in the data.  It is therefore likely that the processes influencing subsidence estimates and fault locking rate estimates are not exactly the same.  However, fitting a model using both data sources is necessary, since locking rate estimates provide no information about the average magnitude of each earthquake, and the subsidence data provides provide minimal constraint on the slip spatial correlation structure and the down-dip slip profile given that the data are aligned north-south along the coastline.
+Fitting the combined model resulted in the parameter MLEs and standard errors given in Tab. \ref{dataStats}, where standard errors are calculated using the hessian of the log-likelihood function.  Table \ref{dataStats} shows that, for the combined and separate taper models, $\mu_Z$ is 17.546 and 16.527 meters respectively.  Similarly, the estimates for $\sigma_Z$ are 12.065 and 7.730 respectively, which, along with a highly significant $\chi^2$ test, indicates that allowing separate tapers seems to explain a large amount of variation in the data.  It is therefore likely that the processes influencing subsidence estimates and fault locking rate estimates are not exactly the same.  However, fitting a model using both data sources is necessary, since locking rate estimates provide no information about the average magnitude of each earthquake, and the subsidence data provides provide minimal constraint on the slip spatial correlation structure and the down-dip slip profile given that the data are aligned north-south along the coastline.
 
 For both combined and separated taper models, the optimal inflations for the macrofossil subsidence estimates ($\psi_h$) are 1.25 while the optimal inflations for the microfossil estimates  ($\psi_l$) is 1.75.  This consistency suggests this inflation is to some extent robust to model choice.  Although estimate quality of course varies from study to study, it is nevertheless relevant that our models show the more recent microfossil estimates of subsidence seem to be better able to estimate their associated uncertainty.  Note that this does not mean microfossil estimates are better estimates, just that their associated uncertainties better reflect the true underlying uncertainty in the data.  In fact, after inflating uncertainties appropriately, the square root of the mean variance of the subsidence data is $~0.45$ cm for the microfossil estimates compared to $~0.47$ cm for the macrofossil estimates.  This suggests that even if microfossil subsidence estimates often better estimate their uncertainty, estimate quality tends to be nearly identical for the micro- and macrofossil subsidence data used in this study.
 
@@ -731,6 +715,9 @@ LeVeque RJ, Waagan K, Gonz{\'a}lez FI, Rim D, Lin G (2016) Generating random
 Loveless JP, Meade BJ (2011) Stress modulation on the {S}an {A}ndreas fault by
   interseismic fault system interactions. Geology 39(11):1035--1038
 
+\bibitem[{Mandli et al.(2016)}]{clawpack}
+Mandli, Kyle T and Ahmadia, Aron J and Berger, Marsha and Calhoun, Donna and George, David L and Hadjimichael, Yiannis and Ketcheson, David I and Lemoine, Grady I and LeVeque, Randall J (2016) Clawpack: building an open source ecosystem for solving hyperbolic {PDE}s. PeerJ Comput Sci 2:e68. \doi{10.7717/peerj-cs.68}, \urlprefix\url{https://doi.org/10.7717/peerj-cs.68}
+
 \bibitem[{McCaffrey et~al.(2007)McCaffrey, Qamar, King, Wells, Khazaradze,
   Williams, Stevens, Vollick, and Zwick}]{GPS5}
 McCaffrey R, Qamar AI, King RW, Wells R, Khazaradze G, Williams CA, Stevens CW,
@@ -952,7 +939,7 @@ Since $\frac{\partial}{\partial \beta_i} t_j$ has already been derived, we can c
 
 \subsection*{Matern covariance gradient:}
 
-For Matern correlation function $\rho(d; \phi, \alpha , \nu)$ with smoothness parameter assumed to be $\nu = 3/2$, the covariance function takes the simplified form (under the parameterization used on page 31 of Michael Stein's \textit{Interpolation of Spatial Data: Some Theory for Kriging}):
+For Matern correlation function $\rho(d; \phi, \alpha , \nu)$ with smoothness parameter assumed to be $\nu = 3/2$, the covariance function takes the simplified form (under the parameterization used on page 31 of \citet{steinBook}:
 
 $$ \sigma_Z^2 \cdot \rho(d; \phi, \alpha , 3/2) = \sigma_Z^2 \left( 1 + \frac{d}{\phi} \right) \text{exp} \left\{ -\frac{d}{\phi} \right \}. $$
 Hence,
@@ -1006,31 +993,22 @@ For weights $c_i \propto Var(\xi_i)^{-1}$ summing to 1. Hence, we need to accoun
 \begin{align*}
 \frac{\partial}{\partial \mu_Z} \hat{\gamma} &= - \hat{\gamma}/\mu_Z \\
 \frac{\partial}{\partial \beta_j} \hat{\gamma} &= \frac{\exp \left\{ \sum_i c_i \log(X_i) \right\}}{\mu_Z} \exp \left\{- \sum_i c_i \log(t_i) \right\} \cdot \sum_i-\frac{c_i}{t_i} \frac{\partial t_i}{\partial \beta_j} \\
-&= \hat{\gamma} (\vec{c} \odot \vec{t})^T \frac{\partial \vec{t}}{\partial \beta_j} \\
-\frac{\partial}{\partial \vec{\beta}} \hat{\gamma} &= \hat{\gamma} (\vec{c} \odot \vec{t})^T \frac{\partial \vec{t}}{\partial \vec{\beta}}
+&= -\hat{\gamma} \vec{c}^T \mathbf{T}^{-1} \frac{\partial \vec{t}}{\partial \beta_j} \\
+\frac{\partial}{\partial \vec{\beta}} \hat{\gamma} &= -\hat{\gamma} \vec{c}^T \mathbf{T}^{-1} \frac{\partial \vec{t}}{\partial \beta} \\
 \end{align*}
 Since the same correlation structure in $\vec{Z}$ is enforced in $\vec{\xi }$, we have $Var(\vec{\xi }) = \text{diag}(\vec{\sigma }) \mathbf{C}_{\vec{Z}} \text{diag}(\vec{\sigma }) $, where $\vec{\sigma }$ is the marginal standard errors for the locking rate estimates, and $\mathbf{C}_{\vec{Z}}$ is the correlation matrix of the $\vec{Z}$ process when evaluated at the locking rate estimate locations. The gradient of $\mathbf{\Sigma}_x$ is then
 $$ \frac{\partial}{\partial \theta_i} \mathbf{\Sigma}_x = \frac{\partial}{\partial \theta_i} \gamma^2 \mathbf{T} Var\left(\vec{Z}\right) \mathbf{T} + \text{diag}(\vec{\sigma })\left  [\frac{\partial}{\partial \theta_i} \mathbf{C}_{\vec{Z}}\right ] \text{diag}(\vec{\sigma }) $$
-The to summed gradients above can be calculated by combining the solution to the gradient of gamma, the gradient of the covariance in the subsidence case, and the gradient of the correlation in the subsidence case. The normal log likelihood gradient is then:
-\begin{align*}
-\frac{\partial}{\partial \theta_i} l(\vec{\theta}) &= -\frac{1}{2} \frac{\partial}{\partial \theta_i}  \left [ \vec{X}^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{X} - 2 \vec{X}^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta}) + \vec{\mu}_x(\vec{\theta})^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta}) \right ] - \frac{1}{2} \frac{\partial}{\partial \theta_i} \log(|\mathbf{\Sigma}_x|) \\
-\frac{\partial}{\partial \theta_i}  \vec{X}^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{X} &= -\vec{X}^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \frac{\partial \mathbf{\Sigma}_x(\vec{\theta})}{\partial \theta_i} \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{X} \\
-- 2 \frac{\partial}{\partial \theta_i} \vec{X}^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta}) &= - 2 \vec{X}^T \left( \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \frac{\partial \vec{\mu}_x(\vec{\theta})}{\theta_i} - \mathbf{\Sigma}_x^{-1}(\vec{\theta})\frac{\partial \mathbf{\Sigma}_x(\vec{\theta})}{\partial \theta_i} \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta})  \right) \\
-\frac{\partial}{\partial \theta_i} \vec{\mu}_x(\vec{\theta})^T \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta}) &= \vec{\mu}_x(\vec{\theta})^T \left( \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \frac{\partial \vec{\mu}_x(\vec{\theta})}{\partial \theta_i} - \mathbf{\Sigma}_x^{-1} \frac{\partial \mathbf{\Sigma}_x(\vec{\theta})}{\partial \theta_i} \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta}) \right) + \frac{\partial \vec{\mu}_x(\vec{\theta})^T}{\partial \theta_i} \mathbf{\Sigma}_x^{-1}(\vec{\theta}) \vec{\mu}_x(\vec{\theta}) \\
-- \frac{1}{2} \frac{\partial}{\partial \theta_i} \log(|\mathbf{\Sigma}_x(\vec{\theta})|) &= -\frac{1}{2} \text{tr}\left(\mathbf{\Sigma}_x^{-1}(\vec{\theta}) \frac{\partial \mathbf{\Sigma}_x(\vec{\theta})}{\partial \theta_i} \right)
-\end{align*}
-
-The gradient of these terms depends only on the gradient of $\vec{\mu}_x(\vec{\theta})$ and of $\mathbf{\Sigma}_x(\vec{\theta})$, which are:
+The to summed gradients above can be calculated by combining the solution to the gradient of gamma, the gradient of the covariance in the subsidence case, and the gradient of the correlation in the subsidence case. The normal log likelihood gradient for the locking rate data takes the same format as for the subsidence data given at the beginning of the section, and depends only on the gradient of $\vec{\mu}_x(\vec{\theta})$ and of $\mathbf{\Sigma}_x(\vec{\theta})$, which are:
 
 \begin{align*}
 \frac{\partial}{\partial \mu_Z} \mathbf{\Sigma}_x &= 2 \hat{\gamma} \frac{\partial \hat{\gamma}}{\partial \mu_Z} \mathbf{T} Var\left(\vec{Z}\right) \mathbf{T} \\
 \frac{\partial}{\partial \sigma_Z} \mathbf{\Sigma}_x &= \hat{\gamma}^2 \mathbf{T} \frac{\partial \mathbf{\Sigma}_Z}{\partial \sigma_Z} \mathbf{T} \\
-\frac{\partial}{\partial \beta_i} \mathbf{\Sigma}_x &= \hat{\gamma}^2 \left[ \frac{\partial \mathbf{T}}{\partial \beta_i} Var(\vec{Z}) \mathbf{T} + \mathbf{T} Var(\vec{Z}) \frac{\partial \mathbf{T}}{\partial \beta_i} \right] \\
+\frac{\partial}{\partial \beta_i} \mathbf{\Sigma}_x &= -2 \sigma_Z^2 \hat{ \gamma }^2 \vec{c}^T \mathbf{T}^{-1} \frac{\partial \vec{t}}{\partial  \beta_i}   \cdot \mathbf{T} \mathbf{C} \mathbf{T} + \hat{ \gamma }^2  \sigma_Z^2 \mathbf{C} \brack{\paren{\frac{\partial \vec{t}}{\partial  \beta_i}} \vec{t}^T + \vec{t} \paren{\frac{\partial \vec{t}}{\partial  \beta_i}}^T}\\
 \frac{\partial}{\partial \phi} \mathbf{\Sigma}_x &= \hat{\gamma}^2 \mathbf{T} \frac{\partial \mathbf{\Sigma}_Z}{\partial \phi} \mathbf{T}  + \text{diag}(\vec{\sigma })\left  [\frac{\partial}{\partial \phi } \mathbf{C}_{\vec{Z}}\right ] \text{diag}(\vec{\sigma }) \\
 \frac{\partial}{\partial \alpha } \mathbf{\Sigma}_x &= \hat{\gamma}^2 \mathbf{T} \frac{\partial \mathbf{\Sigma}_Z}{\partial \alpha } \mathbf{T}  + \text{diag}(\vec{\sigma })\left  [\frac{\partial}{\partial \alpha } \mathbf{C}_{\vec{Z}}\right ] \text{diag}(\vec{\sigma }) \\
 \frac{\partial}{\partial \mu_Z} \vec{\mu}_x &= \hat{\gamma} \mathbf{T} \frac{\partial}{\partial \mu_Z} E\left[ \vec{Z} \right] + \left( \frac{\partial}{\partial \mu_Z} \hat{\gamma} \right) \mathbf{T} E\left[ \vec{Z} \right] = \hat{\gamma} \mathbf{T} \vec{1} - (\hat{\gamma}/\mu_Z) \vec{t} \mu_Z = 0 \\
 \frac{\partial}{\partial \sigma_Z} \vec{\mu}_x &= \hat{\gamma} \mathbf{T} \frac{\partial}{\partial \sigma_Z} E\left[ \vec{Z} \right] = 0 \\
-\frac{\partial}{\partial \vec{\beta}} \vec{\mu}_x &= \hat{\gamma} \cdot \text{diag}\left(E\left[ \vec{Z} \right]\right) \frac{\partial \vec{t}}{\partial \vec{\beta}} +  \mathbf{T} E\left[ \vec{Z} \right] \left(\frac{\partial}{\partial \vec{\beta}} \hat{\gamma} \right)^T \\
+\frac{\partial}{\partial \vec{\beta}} \vec{\mu}_x &= \hat{\gamma} \cdot \text{diag}\left(E\left[ \vec{Z} \right]\right) \frac{\partial \vec{t}}{\partial \vec{\beta}} +  \mathbf{T} E\left[ \vec{Z} \right] \left(\frac{\partial \hat{\gamma}}{\partial \vec{\beta}} \right)^T \\
 \frac{\partial}{\partial \phi} \vec{\mu}_x &= \hat{\gamma} \mathbf{T} \frac{\partial}{\partial \phi} E\left[ \vec{Z} \right] = 0 \\
 \frac{\partial}{\partial \alpha} \vec{\mu}_x &= \hat{\gamma} \mathbf{T} \frac{\partial}{\partial \alpha } E\left[ \vec{Z} \right] = 0
 \end{align*}

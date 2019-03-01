@@ -138,7 +138,8 @@ predsGivenGPSFull = function(params, nsim=100, muVec=NULL, gpsDat=slipDatCSZ, fa
 # and (conditional) variance"
 # Sigmac = SigmaP - SigmaPtoD %*% (SigmaD + diag(sigmaXi^2))^(-1) %*% SigmaDtoP
 predsGivenGPS = function(params, nsim=100, muVec=NULL, tvec=NULL, fault=csz, posNormalModel=FALSE, 
-                         normalModel=posNormalModel, normalizeTaper=FALSE, dStar=28000) {
+                         normalModel=posNormalModel, normalizeTaper=FALSE, dStar=28000, 
+                         anisotropic=FALSE) {
   # get fit MLEs
   if(is.null(muVec)) {
     lambda = params[1]
@@ -156,6 +157,7 @@ predsGivenGPS = function(params, nsim=100, muVec=NULL, tvec=NULL, fault=csz, pos
     muVecGPS = muVec[1:nrow(slipDatCSZ)]
     muVecCSZ = muVec[(nrow(slipDatCSZ)+1):length(muVec)]
   }
+  stop("predsGivenGPS function no longer supported")
   
   # get the taper
   if(is.null(tvec))
@@ -276,7 +278,7 @@ predsGivenGPS = function(params, nsim=100, muVec=NULL, tvec=NULL, fault=csz, pos
 # generate predictions given only the parameter MLEs (no GPS or subsidence data)
 preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nrow(fault)), 
                  posNormalModel=FALSE, normalModel=posNormalModel, phiZeta=NULL, 
-                 taperedGPSDat=FALSE) {
+                 taperedGPSDat=FALSE, anisotropic=FALSE, fastPNSim=TRUE) {
   # get parameters
   if(is.null(muVec)) {
     lambda = params[1]
@@ -326,38 +328,144 @@ preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nr
     arealCSZCor = getArealCorMat(fault, normalModel=normalModel)
   }
   else {
-    phiZ = params[length(params)]
+    phiZ = params[length(params) - anisotropic]
     coordsZ = cbind(fault$longitude, fault$latitude)
-    distMatZ = rdist.earth(coordsZ, miles=FALSE)
-    arealCSZCor = stationary.cov(coordsZ, Covariance="Matern", theta=phiZ,
-                             onlyUpper=FALSE, distMat=distMatZ, smoothness=3/2)
+    xd = cbind(slipDatCSZ$lon, slipDatCSZ$lat)
+    
+    if(!anisotropic) {
+      distMatZ = rdist.earth(coordsZ, miles=FALSE)
+      arealCSZCor = stationary.cov(coordsZ, Covariance="Matern", theta=phiZ,
+                                   onlyUpper=FALSE, distMat=distMatZ, smoothness=3/2)
+      
+      # compute covariance at GPS locations
+      SigmaD = stationary.cov(xd, Covariance="Matern", Distance="rdist.earth", Dist.args=list(miles=FALSE), 
+                              theta=phiZeta, smoothness=nuZeta) * sigmaZeta^2
+    }
+    else {
+      alpha = params[length(params)]
+      coordsCSZ = cbind(fault$longitude, fault$latitude)
+      
+      ### Rather than training the fault, we redefine an axis to be the strike access in Euclidean space
+      ### using a Lambert projection and PCA
+      out = straightenFaultLambert()
+      faultGeomStraight = out$fault
+      scale = out$scale
+      parameters = out$projPar
+      transformation = out$transformation
+      
+      cszStraight = divideFault2(faultGeomStraight)
+      centers = getFaultCenters(csz)[,1:2]
+      newCenters = transformation(centers)
+      cszStraight$centerX = newCenters[,1]
+      cszStraight$centerY = newCenters[,2]
+      straightenedGpsCoords = transformation(cbind(slipDatCSZ$lon, slipDatCSZ$lat))
+      
+      # calculate along strike and along dip squared distances in kilometers
+      strikeCoordsCSZ = cbind(0, cszStraight$centerY)
+      dipCoordsCSZ = cbind(cszStraight$centerX, 0)
+      squareStrikeDistCsz = rdist(strikeCoordsCSZ)^2
+      squareDipDistCsz = rdist(dipCoordsCSZ)^2
+      
+      # do the same for the gps data
+      strikeCoordsGps = cbind(0, straightenedGpsCoords[,2])
+      dipCoordsGps = cbind(straightenedGpsCoords[,1], 0)
+      squareStrikeDistGps = rdist(strikeCoordsGps)^2
+      squareDipDistGps = rdist(dipCoordsGps)^2
+      
+      # compute gps, fault, and cross distance matrices
+      distMatGPS = sqrt(alpha^2 * squareStrikeDistGps + alpha^(-2) * squareDipDistGps)
+      distMatCSZ = sqrt(alpha^2 * squareStrikeDistCsz + alpha^(-2) * squareDipDistCsz)
+      
+      # now compute the covariances
+      xs = cbind(fault$longitude, fault$latitude)
+      arealCSZCor = stationary.cov(xs, Covariance="Matern", theta=phiZeta, 
+                                 smoothness=nuZeta, distMat = distMatCSZ)
+      
+      SigmaD = stationary.cov(xd, Covariance="Matern", theta=phiZeta, 
+                              smoothness=nuZeta, distMat = distMatGPS) * sigmaZeta^2
+    }
   }
   Sigma = arealCSZCor * sigmaZeta^2
   SigmaL = t(chol(Sigma))
   
-  # generate predictive simulations
-  notAllPos=TRUE
-  zetaSims = matrix(-1, nrow=nrow(xp), ncol=nsim)
-  nNewSims = nsim
-  while(notAllPos) {
-    # generate simulations until all slips are positive, if necessary
-    negCol = function(simCol) {
-      any(simCol < 0)
+  # # generate predictive simulations
+  # notAllPos=TRUE
+  # zetaSims = matrix(-1, nrow=nrow(xp), ncol=nsim)
+  # nNewSims = nsim
+  # while(notAllPos) {
+  #   # generate simulations until all slips are positive, if necessary
+  #   negCol = function(simCol) {
+  #     any(simCol < 0)
+  #   }
+  #   negCols = apply(zetaSims, 2, negCol)
+  #   if(nNewSims != sum(negCols)) {
+  #     nNewSims = sum(negCols)
+  #     print(paste0("number of simulations remaining: ", nNewSims))
+  #   }
+  #   
+  #   zSims = matrix(rnorm(nNewSims*nrow(xp)), nrow=nrow(xp), ncol=nNewSims)
+  #   logZetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
+  #   if(!normalModel)
+  #     zetaSims[,negCols] = exp(logZetaSims)
+  #   else
+  #     zetaSims[,negCols] = logZetaSims
+  #   
+  #   notAllPos =  any(zetaSims < 0) && posNormalModel
+  # }
+  # slipSims = sweep(zetaSims, 1, tvec, FUN="*")
+  
+  if(posNormalModel) {
+    notAllPos=TRUE
+    nNewSims = nsim
+    zetaSims = matrix(-1, nrow=nrow(SigmaL), ncol=nsim) # multiply by two for consistency with Stan MCMC results
+    while(notAllPos) {
+      # generate simulations until all slips are positive, if necessary
+      # can check probability of generating all positive simulation with this code:
+      # library(mvtnorm)
+      # pmvnorm(upper=rep(0, nrow(csz)), mean=muc[-(1:nrow(gpsDat))], sigma=Sigmac[-(1:nrow(gpsDat)),-(1:nrow(gpsDat))])
+      negCol = function(simCol) {
+        any(simCol < 0)
+      }
+      negCols = apply(zetaSims, 2, negCol)
+      if(nNewSims != sum(negCols)) {
+        nNewSims = sum(negCols)
+        print(paste0("number of simulations remaining: ", nNewSims))
+      }
+      
+      if(! fastPNSim) {
+        # simulate only for remaining columns
+        zSims = matrix(rnorm(nNewSims*nrow(SigmaL)), nrow=nrow(SigmaL), ncol=nNewSims)
+        thisZetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
+        zetaSims[,negCols] = thisZetaSims
+      }
+      else {
+        # simulate a bunch and take any sims that are positive
+        zSims = matrix(rnorm(nsim*nrow(SigmaL)), nrow=nrow(SigmaL), ncol=nsim)
+        thisZetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
+        thisPosCols = which(!apply(thisZetaSims, 2, negCol))
+        
+        if(length(thisPosCols) > nNewSims) {
+          zetaSims[,negCols] = thisZetaSims[,thisPosCols[1:nNewSims]]
+        }
+        else if(length(thisPosCols) > 0) {
+          negColsI = which(negCols)
+          zetaSims[,negColsI[1:length(thisPosCols)]] = thisZetaSims[,thisPosCols]
+        }
+      }
+      
+      notAllPos =  any(zetaSims < 0) && posNormalModel
     }
-    negCols = apply(zetaSims, 2, negCol)
-    if(nNewSims != sum(negCols)) {
-      nNewSims = sum(negCols)
-      print(paste0("number of simulations remaining: ", nNewSims))
+    if(!normalModel) {
+      logZetaSims = zetaSims
+      zetaSims = exp(logZetaSims)
+    } else {
+      logZetaSims = log(zetaSims)
     }
-    
-    zSims = matrix(rnorm(nNewSims*nrow(xp)), nrow=nrow(xp), ncol=nNewSims)
-    logZetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
-    if(!normalModel)
-      zetaSims[,negCols] = exp(logZetaSims)
-    else
-      zetaSims[,negCols] = logZetaSims
-    
-    notAllPos =  any(zetaSims < 0) && posNormalModel
+  }
+  else {
+    zSims = matrix(rnorm(nsim*nrow(SigmaL)), nrow=nrow(SigmaL), ncol=nsim)
+    zetaSims = sweep(SigmaL %*% zSims, 1, muZetaCSZ, "+") # add muZeta to each zero mean simulation
+    logZetaSims = matrix(NA, ncol=2, nrow=nrow(zetaSims))
   }
   slipSims = sweep(zetaSims, 1, tvec, FUN="*")
   
@@ -371,11 +479,6 @@ preds = function(params, nsim=100, fault=csz, muVec=NULL, tvec=rep(params[1], nr
     if(nsim < 1000)
       warning("mean slip estimates may be poor with positive normal mode for <1000 simulations")
   }
-  
-  # compute covariance at GPS locations
-  xd = cbind(slipDatCSZ$lon, slipDatCSZ$lat)
-  SigmaD = stationary.cov(xd, Covariance="Matern", Distance="rdist.earth", Dist.args=list(miles=FALSE), 
-                          theta=phiZeta, smoothness=nuZeta) * sigmaZeta^2
   
   return(list(meanSlip=meanSlip, slipSims=slipSims, Sigma=Sigma, Sigmac=Sigma, muc=muZetaCSZ, 
               SigmacGPS = SigmaD, mucGPS=muZetaGPS))
@@ -561,7 +664,7 @@ predsToSubsidence = function(params, preds, fault=csz, useMVNApprox=TRUE, G=NULL
   # NOTE: use preds$Sigma not preds$Sigmac since Sigmac gives the covariance in mean estimate
   sigmaEps = subDat$Uncertainty
   if(normalModel && !posNormalModel && useMVNApprox) {
-    subMVN = estSubsidenceMeanCov(preds$muc, lambda, sigmaZeta, preds$Sigma, G, fault=fault, subDat=subDat, 
+    subMVN = estSubsidenceMeanCov(preds$muc, lambda, preds$Sigma, G, fault=fault, subDat=subDat, 
                                   normalModel=TRUE, tvec=tvec)
     subMu = subMVN$mu
     subSigma = subMVN$Sigma
@@ -573,7 +676,7 @@ predsToSubsidence = function(params, preds, fault=csz, useMVNApprox=TRUE, G=NULL
     subSimsNoise=NULL
   }
   else if(useMVNApprox) {
-    subMVN = estSubsidenceMeanCov(preds$muc, lambda, sigmaZeta, preds$Sigma, G, subDat=subDat, fault=fault, 
+    subMVN = estSubsidenceMeanCov(preds$muc, lambda, preds$Sigma, G, subDat=subDat, fault=fault, 
                                   tvec=tvec)
     subMu = subMVN$mu
     subSigma = subMVN$Sigma
@@ -834,7 +937,7 @@ genFullPreds = function(params, nsim=1000, normalizeTaper=FALSE, dStar=28000) {
   # assumption.
   arealCSZCor = getArealCorMat(fault)
   SigmaZeta = arealCSZCor * sigmaZeta^2
-  moments = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaZeta, G, tvec, TRUE, csz)
+  moments = estSubsidenceMeanCov(muZeta, lambda, SigmaZeta, G, tvec, TRUE, csz)
   muEst = moments$mu
   SigmaEstU = chol(moments$Sigma + diag(dr1$Uncertainty^2))
   logFY = logLikGP(-dr1$subsidence - muEst, SigmaEstU)
@@ -905,7 +1008,7 @@ genFullPredsGPS = function(params, nsim=25000, normalizeTaper=FALSE, dStar=28000
   # assumption.
   arealCSZCor = getArealCorMat(fault)
   SigmaZeta = arealCSZCor * sigmaZeta^2
-  moments = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaZeta, G, tvec, TRUE, csz)
+  moments = estSubsidenceMeanCov(muZeta, lambda, SigmaZeta, G, tvec, TRUE, csz)
   muEst = moments$mu
   SigmaEstU = chol(moments$Sigma + diag(dr1$Uncertainty^2))
   logFY = logLikGP(-dr1$subsidence - muEst, SigmaEstU)
@@ -983,7 +1086,7 @@ genFullPredsMarginal = function(params, nsim=1000) {
   # assumption.
   arealCSZCor = getArealCorMat(fault)
   SigmaZeta = arealCSZCor * sigmaZeta^2
-  moments = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaZeta, G, tvec, TRUE, csz)
+  moments = estSubsidenceMeanCov(muZeta, lambda, SigmaZeta, G, tvec, TRUE, csz)
   muEst = moments$mu
   SigmaEstU = chol(moments$Sigma + diag(dr1$Uncertainty^2))
   logFY = logLikGP(-dr1$subsidence - muEst, SigmaEstU)
@@ -1023,7 +1126,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
                                 tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], 
                                            normalize=normalizeTaper, dStar=dStar), priorMaxSlip=NA, 
                                 normalModel=FALSE, posNormalModel=FALSE, taperedGPSDat=FALSE, 
-                                gpsDat=slipDatCSZ, fastPNSim=TRUE) {
+                                gpsDat=slipDatCSZ, fastPNSim=TRUE, anisotropic=FALSE) {
   if(posNormalModel && !normalModel)
     stop("normalModel must be set to TRUE if posNormalModel is set to TRUE")
   
@@ -1044,9 +1147,17 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
     corPar = getCorPar(normalModel=normalModel)
     phiZeta = corPar$phiZeta
     nuZeta = corPar$nuZeta
+    if(anisotropic)
+      alpha = params[length(params)]
+    else
+      alpha = 1
   }
   else {
-    phiZeta = params[length(params)]
+    phiZeta = params[length(params) - anisotropic]
+    if(anisotropic)
+      alpha = params[length(params)]
+    else
+      alpha = 1
     nuZeta = 3/2
   }
   
@@ -1072,6 +1183,9 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
       SigmaArea = arealZetaCov(params, fault, nDown1=9, nStrike1=12, normalModel=normalModel)
     }
     
+    if(anisotropic)
+      stop("anisotropic option not supported with untapered gps data")
+    
     # compute point log zeta covariance matrix and cross-covariance
     xs = cbind(gpsDat$lon, gpsDat$lat)
     SigmaPointToArea = pointArealZetaCov(params, xs, fault, nDown=9, nStrike=12, normalModel=normalModel)
@@ -1083,18 +1197,71 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
     # under tapered GPS data model, don't compute the areal covariance matrix.  Approximate it 
     # with the pointwise covariance matrix
     
-    xs = cbind(fault$longitude, fault$latitude)
-    SigmaArea = stationary.cov(xs, Covariance="Matern", theta=phiZeta, 
-                               smoothness=nuZeta, Distance="rdist.earth", 
-                               Dist.args=list(miles=FALSE)) * sigmaZeta^2
-    
-    xsPt = cbind(gpsDat$lon, gpsDat$lat)
-    SigmaPointToArea = stationary.cov(x1=xsPt, x2=xs, Covariance="Matern", theta=phiZeta, 
-                                      smoothness=nuZeta, Distance="rdist.earth", 
-                                      Dist.args=list(miles=FALSE)) * sigmaZeta^2
-    SigmaPoint = stationary.cov(xsPt, Covariance="Matern", theta=phiZeta, 
-                                smoothness=nuZeta, Distance="rdist.earth", 
-                                Dist.args=list(miles=FALSE)) * sigmaZeta^2
+    if(!anisotropic) {
+      xs = cbind(fault$longitude, fault$latitude)
+      SigmaArea = stationary.cov(xs, Covariance="Matern", theta=phiZeta, 
+                                 smoothness=nuZeta, Distance="rdist.earth", 
+                                 Dist.args=list(miles=FALSE)) * sigmaZeta^2
+      
+      xsPt = cbind(gpsDat$lon, gpsDat$lat)
+      SigmaPointToArea = stationary.cov(x1=xsPt, x2=xs, Covariance="Matern", theta=phiZeta, 
+                                        smoothness=nuZeta, Distance="rdist.earth", 
+                                        Dist.args=list(miles=FALSE)) * sigmaZeta^2
+      SigmaPoint = stationary.cov(xsPt, Covariance="Matern", theta=phiZeta, 
+                                  smoothness=nuZeta, Distance="rdist.earth", 
+                                  Dist.args=list(miles=FALSE)) * sigmaZeta^2
+    }
+    else {
+      coordsGPS = cbind(gpsDat$lon, gpsDat$lat)
+      coordsCSZ = cbind(fault$longitude, fault$latitude)
+      
+      ### Rather than training the fault, we redefine an axis to be the strike access in Euclidean space
+      ### using a Lambert projection and PCA
+      out = straightenFaultLambert()
+      faultGeomStraight = out$fault
+      scale = out$scale
+      parameters = out$projPar
+      transformation = out$transformation
+      
+      cszStraight = divideFault2(faultGeomStraight)
+      centers = getFaultCenters(csz)[,1:2]
+      newCenters = transformation(centers)
+      cszStraight$centerX = newCenters[,1]
+      cszStraight$centerY = newCenters[,2]
+      straightenedGpsCoords = transformation(cbind(gpsDat$lon, gpsDat$lat))
+      
+      # calculate along strike and along dip squared distances in kilometers
+      strikeCoordsCSZ = cbind(0, cszStraight$centerY)
+      dipCoordsCSZ = cbind(cszStraight$centerX, 0)
+      squareStrikeDistCsz = rdist(strikeCoordsCSZ)^2
+      squareDipDistCsz = rdist(dipCoordsCSZ)^2
+      
+      # do the same for the gps data
+      strikeCoordsGps = cbind(0, straightenedGpsCoords[,2])
+      dipCoordsGps = cbind(straightenedGpsCoords[,1], 0)
+      squareStrikeDistGps = rdist(strikeCoordsGps)^2
+      squareDipDistGps = rdist(dipCoordsGps)^2
+      
+      # compute the same for the cross distances between the point areal data
+      squareDistMatCrossStrike = rdist(strikeCoordsGps, strikeCoordsCSZ)^2
+      squareDistMatCrossDip = rdist(dipCoordsGps, dipCoordsCSZ)^2
+      
+      # compute gps, fault, and cross distance matrices
+      distMatGPS = sqrt(alpha^2 * squareStrikeDistGps + alpha^(-2) * squareDipDistGps)
+      distMatCSZ = sqrt(alpha^2 * squareStrikeDistCsz + alpha^(-2) * squareDipDistCsz)
+      distMatCross = sqrt(alpha^2 * squareDistMatCrossStrike + alpha^(-2) * squareDistMatCrossDip)
+      
+      # now compute the covariances
+      xs = cbind(fault$longitude, fault$latitude)
+      SigmaArea = stationary.cov(xs, Covariance="Matern", theta=phiZeta, 
+                                 smoothness=nuZeta, distMat = distMatCSZ) * sigmaZeta^2
+      
+      xsPt = cbind(gpsDat$lon, gpsDat$lat)
+      SigmaPointToArea = stationary.cov(x1=xsPt, x2=xs, Covariance="Matern", theta=phiZeta, 
+                                        smoothness=nuZeta, distMat = distMatCross) * sigmaZeta^2
+      SigmaPoint = stationary.cov(xsPt, Covariance="Matern", theta=phiZeta, 
+                                  smoothness=nuZeta, distMat = distMatGPS) * sigmaZeta^2
+    }
   }
   
   # combine covariance matrices:
@@ -1125,7 +1292,7 @@ predsGivenSubsidence = function(params, muVec=params[2], fault=csz, subDat=dr1, 
     # under the normal model, predictions becomes a conditional normal problem
     
     # get the distribution of Y and its covariance to zeta process
-    mvnApprox = estSubsidenceMeanCov(muZeta, lambda, sigmaZeta, SigmaArea, G, subDat=subDat, 
+    mvnApprox = estSubsidenceMeanCov(muZeta, lambda, SigmaArea, G, subDat=subDat, 
                                      tvec=tvec, normalModel=normalModel)
     SigmaY = mvnApprox$Sigma
     diag(SigmaY) = diag(SigmaY) + sigmaY^2
@@ -2271,7 +2438,8 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
                   G=NULL, prior=FALSE, normalizeTaper=FALSE, dStar=28000, 
                   tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], normalize=normalizeTaper), 
                   priorMaxSlip=NA, normalModel=FALSE, posNormalModel=FALSE, nFold=20, seed=123, 
-                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE, fastPNSim=TRUE) {
+                  bySite=FALSE, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, inPar=TRUE, fastPNSim=TRUE, 
+                  anisotropic=TRUE) {
   
   # set the seed so that data is scrambled the same way every time, no matter the model
   set.seed(seed)
@@ -2332,7 +2500,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
       preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
                                    normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
                                    normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
-                                   gpsDat=gpsDat, fastPNSim=fastPNSim)
+                                   gpsDat=gpsDat, fastPNSim=fastPNSim, anisotropic=anisotropic)
       zetaSims = preds$resultTab$zeta
       
       # make sure all prediction simulations have the same format
@@ -2397,6 +2565,8 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
       
       # first source everything
       library(fields)
+      library(mapproj)
+      library(ggplot2)
       source("taper.R")
       source('predictions.R')
       source('fitModel.R')
@@ -2432,7 +2602,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
       preds = predsGivenSubsidence(params, muVec, fault, trainDat, niter, FALSE, thisG, prior, 
                                    normalizeTaper=normalizeTaper, dStar=dStar, tvec, priorMaxSlip, 
                                    normalModel, posNormalModel, taperedGPSDat=taperedGPSDat, 
-                                   gpsDat=gpsDat, fastPNSim=fastPNSim)
+                                   gpsDat=gpsDat, fastPNSim=fastPNSim, anisotropic=anisotropic)
       zetaSims = preds$resultTab$zeta
       
       # make sure all prediction simulations have the same format
@@ -2480,7 +2650,7 @@ doCVSub = function(params, muVec=params[2], fault=csz, subDat=dr1, testEvent="T1
 getEventMSE = function(params, fault=csz, subDat=dr1, testEvent="T1", niter=500, G=NULL, fauxG=NULL, 
                        normalModel=FALSE, posNormalModel=FALSE, seed=123, normalizeTaper=FALSE, 
                        tvec=taper(getFaultCenters(fault)[,3], lambda=params[1], normalize=normalizeTaper), 
-                       dStar=28000, taperedGPSDat=FALSE, gpsDat=slipDatCSZ) {
+                       dStar=28000, taperedGPSDat=FALSE, gpsDat=slipDatCSZ, anisotropic=TRUE) {
   
   # set the seed so that data is scrambled the same way every time, no matter the model
   set.seed(seed)
@@ -2511,10 +2681,14 @@ getEventMSE = function(params, fault=csz, subDat=dr1, testEvent="T1", niter=500,
   
   # get marginal subsidence distribution (`subsidence` predictions are really uplift)
   if(taperedGPSDat)
-    phiZeta = params[length(params)]
+    phiZeta = params[length(params) - anisotropic]
   else 
     phiZeta=NULL
-  preds = preds(params, niter, fault, muVec, tvec, posNormalModel, normalModel, phiZeta, taperedGPSDat)
+  if(anisotropic)
+    alpha = params[length(params)]
+  else
+    alpha = 1
+  preds = preds(params, niter, fault, muVec, tvec, posNormalModel, normalModel, phiZeta, taperedGPSDat, anisotropic)
   subPreds = predsToSubsidence(params, preds, fault, FALSE, GEvent, eventDat, 
                                posNormalModel, normalModel, tvec, normalizeTaper, dStar)
   

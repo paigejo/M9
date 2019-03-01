@@ -1024,7 +1024,7 @@ ggComparePredsToSubs = function(params, slipPreds=NULL, slipPredsGPS=NULL, subPr
                                 logScale=FALSE, fault=csz, latRange=c(40, 50), 
                                 posNormalModel=FALSE, normalModel=posNormalModel, doGPSPred=FALSE, 
                                 useMVNApprox=FALSE, taperedGPSDat=FALSE, dStar=28000, normalizeTaper=FALSE, 
-                                noTitle=FALSE, lwd=.5, magLimits=c(8.6, 9.4)) {
+                                noTitle=FALSE, lwd=.5, magLimits=c(8.6, 9.4), anisotropic=FALSE) {
   # get parameters
   if(is.null(muVec)) {
     lambdaMLE = params[1]
@@ -1049,14 +1049,15 @@ ggComparePredsToSubs = function(params, slipPreds=NULL, slipPredsGPS=NULL, subPr
   
   #
   if(taperedGPSDat)
-    phiZeta = params[length(params)]
+    phiZeta = params[length(params) - anisotropic]
   else
     phiZeta = NULL
   
   # generate predictions if they are left NULL by the user
   if(is.null(slipPreds))
     slipPreds = preds(params, nsim=nsim, fault=fault, muVec=c(muZetaGPS, muZetaCSZ), tvec=tvec, 
-                      posNormalModel=posNormalModel, normalModel=normalModel, phiZeta=phiZeta)
+                      posNormalModel=posNormalModel, normalModel=normalModel, phiZeta=phiZeta, 
+                      taperedGPSDat=taperedGPSDat, anisotropic=anisotropic)
   if(is.null(slipPredsGPS) && doGPSPred)
     slipPredsGPS = predsGivenGPS(params, nsim=nsim, muVec=c(muZetaGPS, muZetaCSZ), fault=fault, tvec=tvec, 
                                  posNormalModel=posNormalModel, normalModel=normalModel)
@@ -1545,6 +1546,67 @@ ggplotSplineUncertainty = function(splinePar, covMat, nKnots=5, niter=1000, latR
   pl
 }
 
+ggplotTaperDepthUncertainty = function(splinePar, covMat, nKnots=5, niter=1000, latRange=c(40,50), 
+                                       nKnotsGPS=5, latsOnX=TRUE, depthFrac=.9, confLevel=.95, 
+                                       diffGPSTaper=FALSE, main=TeX(paste0(depthFrac * 100, "% Taper Depth ", confLevel * 100, "% Confidence Band")), 
+                                       uncertaintyBands=TRUE, dStar=21000) {
+  
+  lats = seq(latRange[1], latRange[2], l=100)
+  Xi = getSplineBasis(csz, latRange, nKnots, lats)
+  if(diffGPSTaper) {
+    XiGPS = getSplineBasis(csz, latRange, nKnotsGPS, lats)
+    Xi = cbind(Xi, -XiGPS)
+  }
+  
+  # draw simulations of the taper function
+  cntr = Xi %*% splinePar
+  if(uncertaintyBands) {
+    L = t(chol(covMat))
+    Zs = matrix(rnorm(ncol(L)*niter), nrow=ncol(L), ncol=niter)
+    lambdas = sweep(Xi %*% L %*% Zs, 1, cntr, "+")
+    depths = getFracTaperDepth(lambdas, depthFrac, dStar=dStar)
+    lows = apply(depths, 1, quantile, probs=(1 - confLevel) / 2)
+    his = apply(depths, 1, quantile, probs=1 - (1 - confLevel) / 2)
+    cntr = getFracTaperDepth(cntr, depthFrac, dStar=dStar)
+  }
+  
+  if(uncertaintyBands)
+    lambdaRange =c(min(lows), max(his))
+  else
+    lambdaRange = range(cntr)
+  
+  # plot results
+  if(latsOnX) {
+    pl= ggplot() + 
+      geom_path(aes(y=cntr, x=lats), col="blue") +
+      geom_hline(col="black", yintercept = 0) +
+      guides(col=FALSE) + ggtitle(main) + labs(x=TeX(paste0(depthFrac * 100, "% Taper Depth")), y="Latitude") + 
+      theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(), 
+            panel.background = element_rect(fill='white'))
+    
+    if(uncertaintyBands)
+      pl = pl + geom_path(aes(y=his, x=lats, linetype=2), col="blue") + 
+        geom_path(aes(y=lows, x=lats, linetype=2), col="blue")
+  }
+  else {
+    pl = ggplot() + 
+      geom_path(aes(x=cntr, y=lats), col="blue") +
+      coord_cartesian(xlim=lambdaRange, ylim=latRange) + 
+      geom_vline(col="black", xintercept = 0) +
+      guides(col=FALSE) + ggtitle(main) + labs(x=TeX(paste0(depthFrac * 100, "% Taper Depth")), y="Latitude") + 
+      theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(), 
+            panel.background = element_rect(fill='white'))
+    
+    if(uncertaintyBands)
+      pl = pl + geom_path(aes(x=lows, y=lats), col="blue", linetype=2L) +
+        geom_path(aes(x=his, y=lats), col="blue", linetype=2L)
+  }
+  
+  pl
+}
+
 
 # compare mean slip, sub preds, mags of different models
 ggCompareModels = function(modelFitList, 
@@ -1556,7 +1618,7 @@ ggCompareModels = function(modelFitList,
                            useMVNApprox=FALSE, noTitle=TRUE, taperedGPSDat=TRUE, 
                            magRange=NULL, lwd=.5, magTicks=NULL, plotSubPreds=FALSE, 
                            subPredMeanRange=c(-2,2), adjustedMeans=NULL, 
-                           varRange=NULL) {
+                           varRange=NULL, anisotropic=FALSE) {
   
   plots = list()
   for(i in 1:length(modelFitList)) {
@@ -1589,16 +1651,17 @@ ggCompareModels = function(modelFitList,
       muZetaCSZ = muVec[(nrow(slipDatCSZ)+1):length(muVec)]
     }
     
-    #
+    # get the correlation range
     if(taperedGPSDat)
-      phiZeta = params[length(params)]
+      phiZeta = params[length(params) - anisotropic]
     else
       phiZeta = NULL
     
     # generate predictions if they are left NULL by the user
     if(is.null(slipPreds))
       slipPreds = preds(params, nsim=nsim, fault=fault, muVec=c(muZetaGPS, muZetaCSZ), tvec=tvec, 
-                        posNormalModel=posNormalModel, normalModel=normalModel, phiZeta=phiZeta)
+                        posNormalModel=posNormalModel, normalModel=normalModel, phiZeta=phiZeta, 
+                        anisotropic=anisotropic, taperedGPSDat=taperedGPSDat)
     if(is.null(subPreds)) {
       if(is.null(G))
         subPreds = predsToSubsidence(params, slipPreds, useMVNApprox = useMVNApprox, subDat=subDat, 
@@ -1752,12 +1815,14 @@ ggCompareModels = function(modelFitList,
 
 # function for plotting model locking normalized residuals versus latitude
 ggplotLockingResiduals = function(modelFit, tvecGPS, gpsDat, latRange=c(40,50), 
-                                  main=NULL) {
+                                  main=NULL, doGammaSpline=FALSE) {
   
   params = modelFit$optPar
   muZ = params[1]
   sigmaZ = params[2]
   gamma = modelFit$gammaEst
+  if(doGammaSpline)
+    gamma = modelFit$gammaEst$gammaEstGps
   preds = (muZ * gamma) * tvecGPS
   resids = gpsDat$slip - preds
   normalizedResids = resids/sqrt(gamma^2*sigmaZ^2*tvecGPS^2 + gpsDat$slipErr^2)

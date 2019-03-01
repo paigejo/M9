@@ -714,10 +714,11 @@ ggPlotFault = function(fault=csz, color="black") {
 
 ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE, 
                           logScale=FALSE, xlim=c(-128, -122), ylim=c(39.5, 50.5), 
-                          xlab="Longitude", ylab="Latitude", main="Cascadia Subduction Zone", 
+                          xlab=NULL, ylab=NULL, main="Cascadia Subduction Zone", 
                           clab="Depth (m)", addLegend=plotData, lwd=1, 
                           xName="longitude", yName="latitude", 
-                          projection=NULL, parameters=NULL, orientation=NULL) {
+                          projection=NULL, parameters=NULL, orientation=NULL, 
+                          scale=1, roundDigits=2, coordsAlreadyScaled=FALSE) {
   
   if(is.null(orientation) && !is.null(projection)) {
     warning("no orientation specified, so projection being set to the last used projection")
@@ -734,6 +735,15 @@ ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE,
     states <- map_data("state")
     west_coast <- subset(states, region %in% c("california", "oregon", "washington"))
     canada = map_data("world", "Canada")
+  }
+  
+  # set some reasonable plotting parameters
+  if(is.null(projection)) {
+    xlab = "Longitude"
+    ylab = "Latitude"
+  } else {
+    xlab = "Easting (km)"
+    ylab = "Northing (km)"
   }
   
   if(!is.data.frame(rows))
@@ -759,6 +769,12 @@ ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE,
   faultDat = merge(faultDat, rows[,c("Fault", plotVar)], by=c("Fault"))
   faultDat$plotVar=faultDat[,plotVar]
   
+  # rescale coordinates of the faulty geometry if necessary
+  if(coordsAlreadyScaled) {
+    faultDat$longitude = faultDat$longitude / scale
+    faultDat$latitude = faultDat$latitude / scale
+  }
+  
   # set x and y limits if necessary
   if(is.null(xlim) && is.null(ylim)) {
     xlim=c(-128, -122)
@@ -766,15 +782,14 @@ ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE,
     proj<- mapproject(xlim, ylim) # if projection unspecified, last projection is used
     xlim = proj$x
     ylim = proj$y
-    xScale = scale_x_continuous("Easting", c(-.02, 0, .02, .04), labels=c("-.02", "0", ".02", ".04"), limits=c(-360, 360))
-    ylab = "Northing"
-    xlab = "Easting"
+    xScale = scale_x_continuous(xlab, c(-.02, 0, .02, .04), labels=as.character(round(scale*c(-.02, 0, .02, .04), digits=roundDigits)), limits=c(-360, 360))
+    yScale = scale_y_continuous(ylab, seq(-.74, -.60, by=.02), labels=as.character(round(scale*seq(-.74, -.60, by=.02), digits=roundDigits)), limits=c(-360, 360))
   } else if(is.null(xlim)) {
     xlim = range(c(rows[[xName]], faultDat$longitude))
   } else if(is.null(ylim)) {
     ylim = range(c(rows[[yName]], faultDat$latitude))
   } else {
-    xScale = scale_x_continuous("Longitude", c(-127, -125, -123), labels=c("-127", "", "-123"), limits=c(-360, 360))
+    xScale = scale_x_continuous(xlab, c(-127, -125, -123), labels=c("-127", "", "-123"), limits=c(-360, 360))
   }
   
   # grey maps plot:
@@ -782,8 +797,8 @@ ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE,
     bg = ggplot(faultDat, aes(x=longitude, y=latitude)) + 
       geom_polygon(aes(x = long, y = lat, group = group), fill = "grey", color = "black", data=canada) +
       geom_polygon(aes(x = long, y = lat, group = group), fill = "grey", color = "black", data=west_coast) + 
-      coord_fixed(xlim = xlim,  ylim = ylim, ratio = 1.3, expand=FALSE) + 
-      labs(x=xlab, y=ylab) + xScale + 
+      coord_fixed(xlim = xlim,  ylim = ylim, expand=FALSE) + 
+      labs(x=xlab, y=ylab) + xScale + yScale + 
       theme(panel.border = element_blank(), panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(), 
             panel.background = element_rect(fill='lightblue1'))
@@ -791,7 +806,7 @@ ggPlotFaultDat = function(rows, plotVar="depth", varRange=NULL, plotData=TRUE,
     bg = ggplot(faultDat, aes(x=longitude, y=latitude)) + 
       geom_polygon(aes(x = long, y = lat, group = group), fill = "grey", color = "black", data=canada) +
       geom_polygon(aes(x = long, y = lat, group = group), fill = "grey", color = "black", data=west_coast) + 
-      coord_fixed(xlim = xlim,  ylim = ylim, expand=FALSE) + 
+      coord_fixed(xlim = xlim,  ylim = ylim, ratio = 1.3, expand=FALSE) + 
       labs(x=xlab, y=ylab) + xScale + 
       theme(panel.border = element_blank(), panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(), 
@@ -1313,6 +1328,128 @@ straightenFault3 = function(projection="rectangular", parameters=NULL) {
                  xlim=NULL, ylim=NULL, main="'Straightened' Fault")
   
   newFault
+}
+
+# a new version of straightenFault2 that aligns subfaults with each other perfectly
+straightenFaultLambert = function(fault=faultGeom, initParameters=range(fault$latitude)) {
+  
+  # get original distances between the points and the fault
+  middle = getFaultCenters(fault)[,1:2]
+  originalDist = rdist.earth(middle, miles = FALSE)
+  originalDist = originalDist[lower.tri(originalDist)]
+  
+  # minimize the absolute residual distances relative to spherical distance
+  fun = function(par) {
+    scaleToOriginal = par[1]
+    proj<- mapproject(middle[,1], middle[,2], projection="lambert", parameters=par[2:3]) # if projection unspecified, last projection is used
+    newMiddle = cbind(proj$x, proj$y) * scaleToOriginal
+    newDist = rdist(newMiddle)
+    newDist = newDist[lower.tri(newDist)]
+    mean(abs(newDist - originalDist))
+  }
+  
+  # set initial parameters
+  proj<- mapproject(middle[,1], middle[,2], projection="lambert", parameters=initParameters) # if projection unspecified, last projection is used
+  newMiddle = cbind(proj$x, proj$y)
+  newDist = rdist(newMiddle)
+  newDist = newDist[lower.tri(newDist)]
+  initScale = mean(newDist / originalDist)
+  initPar = c(initScale, initParameters)
+  
+  # calculate optimal production parameters
+  controls = list(fnscale = 1, reltol=1e-6, parscale=c(rep(1, length(initPar))))
+  opt = optim(initPar, fun, control = controls)
+  optPar = opt$par
+  scale = optPar[1]
+  LambertPar = optPar[2:3]
+  
+  # first get the center and corner locations of the sub faults
+  topLeft = getFaultCenters(fault, 1, "corners")[,1:2]
+  topRight = getFaultCenters(fault, 2, "corners")[,1:2]
+  topMiddle = getFaultCenters(fault, 1, "centers")[,1:2]
+  bottomRight = getFaultCenters(fault, 3, "corners")[,1:2]
+  bottomLeft = getFaultCenters(fault, 4, "corners")[,1:2]
+  bottomMiddle = getFaultCenters(fault, 3, "centers")[,1:2]
+  
+  # now project the coordinates into euclidean space
+  proj<- mapproject(topLeft[,1], topLeft[,2])
+  topLeft = cbind(proj$x, proj$y) * scale
+  # projection = .Last.projection
+  proj<- mapproject(topRight[,1], topRight[,2]) # if projection unspecified, last projection is used
+  topRight = cbind(proj$x, proj$y) * scale
+  proj<- mapproject(topMiddle[,1], topMiddle[,2])
+  topMiddle = cbind(proj$x, proj$y) * scale
+  proj<- mapproject(bottomRight[,1], bottomRight[,2])
+  bottomRight = cbind(proj$x, proj$y) * scale
+  proj<- mapproject(bottomMiddle[,1], bottomMiddle[,2])
+  bottomMiddle = cbind(proj$x, proj$y) * scale
+  proj<- mapproject(bottomLeft[,1], bottomLeft[,2])
+  bottomLeft = cbind(proj$x, proj$y) * scale
+  
+  # Now generate strike and dip axes/coordinates using PCA
+  proj<- mapproject(middle[,1], middle[,2]) # if projection unspecified, last projection is used
+  newMiddle = cbind(proj$x, proj$y) * scale
+  center = colMeans(newMiddle)
+  X = sweep(newMiddle, 2, center)
+  xtx = t(X) %*% X
+  out = eigen(xtx)
+  eigenvectors = out$vectors
+  eigenvectors[,2] = -eigenvectors[,2] # use down dip rather than up dip direction
+  eigenvalues = out$values
+  
+  projectedFault = cbind(fault, 
+                   data.frame(topLeftX=topLeft[,1], topLeftY=topLeft[,2], 
+                              topRightX=topRight[,1], topRightY=topRight[,2], 
+                              topMiddleX=0.5 * (topLeft[,1] + topRight[,1]), topMiddleY=0.5 * (topLeft[,2] + topRight[,2]), 
+                              bottomRightX=bottomRight[,1], bottomRightY=bottomRight[,2], 
+                              bottomLeftX=bottomLeft[,1], bottomLeftY=bottomLeft[,2], 
+                              bottomMiddleX=0.5 * (bottomLeft[,1] + bottomRight[,1]), bottomMiddleY=0.5 * (bottomLeft[,2] + bottomRight[,2])))
+  
+  # plot results
+  pl = ggPlotFaultDat(projectedFault, plotData=FALSE, projection="lambert", xName="topLeftX", yName="topLeftY", parameters=parameters, 
+                      xlim=NULL, ylim=NULL, main="'Straightened' Fault", scale=scale, roundDigits=-1, xlab="Easting (km)", 
+                      ylab="Northing (km)", coordsAlreadyScaled=TRUE)
+  
+  # now add strike axis
+  slope = eigenvectors[2, 1] / eigenvectors[1, 1]
+  intercept = center[2] - slope * center[1]
+  pl + geom_abline(col="red", lwd=1, slope = slope, intercept = intercept / scale) + ggtitle("Projected Fault with Strike Axis (Red Line)")
+  
+  # modify the coordinates by projecting them onto the eigenvectors (strike, dip)
+  # add the center shift back in after the transformation for plotting purposes
+  topLeft = sweep(sweep(topLeft, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  topRight = sweep(sweep(topRight, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  topMiddle = sweep(sweep(topMiddle, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  bottomRight = sweep(sweep(bottomRight, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  bottomMiddle = sweep(sweep(bottomMiddle, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  bottomLeft = sweep(sweep(bottomLeft, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  
+  # make a function for the transformation to the new space
+  transformation = function(coords) {
+    proj<- mapproject(coords[,1], coords[,2]) # if projection unspecified, last projection is used
+    coords = cbind(proj$x, proj$y) * scale
+    coords = sweep(sweep(coords, 2, center) %*% eigenvectors, 2, rev(center), "+")
+  }
+  
+  # add the updated coordinates to the fault
+  newFault = cbind(fault, 
+                   data.frame(topLeftX=topLeft[,2], topLeftY=topLeft[,1], 
+                              topRightX=topRight[,2], topRightY=topRight[,1], 
+                              topMiddleX=0.5 * (topLeft[,2] + topRight[,2]), topMiddleY=0.5 * (topLeft[,1] + topRight[,1]), 
+                              bottomRightX=bottomRight[,2], bottomRightY=bottomRight[,1], 
+                              bottomLeftX=bottomLeft[,2], bottomLeftY=bottomLeft[,1], 
+                              bottomMiddleX=0.5 * (bottomLeft[,2] + bottomRight[,2]), bottomMiddleY=0.5 * (bottomLeft[,1] + bottomRight[,1])))
+  
+  pl = ggPlotFaultDat(newFault, plotData=FALSE, projection="lambert", xName="topLeftX", yName="topLeftY", parameters=parameters, 
+                      xlim=NULL, ylim=NULL, main="'Straightened' Fault", scale=scale, roundDigits=-1, xlab="Easting (km)", 
+                      ylab="Northing (km)", coordsAlreadyScaled=TRUE)
+  
+  # now add strike axis
+  slope = eigenvectors[2, 1] / eigenvectors[1, 1]
+  intercept = center[2] - slope * center[1]
+  pl + geom_abline(col="red", lwd=1, slope = slope, intercept = intercept / scale) + ggtitle("Projected Fault with Strike Axis (Red Line)")
+  
+  list(fault=newFault, scale=scale, projPar=LambertPar, MAE=opt$value, transformation=transformation) 
 }
 
 # this function projects gps coordinates onto the new, straightened coordinate system by

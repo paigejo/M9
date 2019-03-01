@@ -69,6 +69,21 @@ taperGrad = function(d, Xi, lambda=1, dStar=21000, normalize=TRUE, diffGPSTaper=
     return(derivMat)
 }
 
-
+# solves the taper equation for d, the depth, given the taper value
+getFracTaperDepth = function(lambdas, depthFrac, alpha=2, dStar=21000, normalize=TRUE, approxNear0=TRUE) {
+  if(!normalize || alpha != 2) {
+    stop("non-normalized taper and non-standard power not yet implemented")
+  }
+  else {
+    ans = sqrt(-dStar^2 * log((1 - exp(-lambdas^2)) * depthFrac + exp(-lambdas^2)) / lambdas^2)
+    
+    if(approxNear0) {
+      smallLam = abs(lambdas) < .0000005
+      ans[smallLam] = sqrt(-dStar^2 * (depthFrac - 1))
+    }
+  }
+  
+  ans
+}
 
 

@@ -5639,3 +5639,206 @@ ggplotGpsData(slipDatStraight, plotVar = newStrikeDist[500,], xlim=NULL, ylim=NU
               main="Old Along-Strike Distance", projection="rectangular", xName="x", yName="y")
 ggplotGpsData(slipDatStraight, plotVar = newDipDist[500,], xlim=NULL, ylim=NULL, clab="km", 
               main="Old Along-Dip Distance", projection="rectangular", xName="x", yName="y")
+
+##### Explore a few different projections that preserves the original spherical distance
+## Lambert
+# straighten the fault
+out = straightenFaultLambert()
+faultLambert = out$fault
+scale = out$scale
+parameters = out$projPar
+transformation = out$transformation
+
+# divided into smaller sub- faults
+cszLambert = divideFault2(faultLambert)
+centers = getFaultCenters(csz)[,1:2]
+newCenters = transformation(centers)
+cszLambert$centerX = newCenters[,1]
+cszLambert$centerY = newCenters[,2]
+
+# straighten the gps data
+newGpsCoords = transformation(cbind(slipDatCSZ$lon, slipDatCSZ$lat))
+slipDatStraight = slipDatCSZ
+slipDatStraight$x = newGpsCoords[,1]
+slipDatStraight$y = newGpsCoords[,2]
+
+# calculate new distances (for gps and fault)
+newGpsCoords = cbind(slipDatStraight$x, slipDatStraight$y)
+newGpsDist = rdist(newGpsCoords)
+newGpsDist = newGpsDist[lower.tri(newGpsDist)]
+
+newFaultcoords = cbind(cszLambert$centerX, cszLambert$centerY)
+newFaultDist = rdist(newFaultcoords)
+newFaultDist = newFaultDist[lower.tri(newFaultDist)]
+
+# calculate old distances (for gps and fault)
+oldFaultDist = rdist.earth(centers, miles=FALSE)
+oldFaultDist = oldFaultDist[lower.tri(oldFaultDist)]
+oldGpsDist = rdist.earth(cbind(slipDatCSZ$lon, slipDatCSZ$lat), miles=FALSE)
+oldGpsDist = oldGpsDist[lower.tri(oldGpsDist)]
+
+# plot distances versus each other
+plot(oldGpsDist, newGpsDist, pch=".", xlab="Spherical distance", ylab="New Distance", 
+     main="Spherical Versus Euclidean Distance (GPS)")
+plot(oldFaultDist, newFaultDist, pch=".", xlab="Spherical distance", ylab="New Distance", 
+     main="Spherical Versus Euclidean Distance (Subfault Centers)")
+
+ggPlotFaultDat(csz, plotVar = newStrikeDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="New Along-Strike Distance")
+ggPlotFaultDat(csz, plotVar = newDipDist[120,], xlim=lonRange, ylim=latRange, clab="km", 
+               main="New Along-Dip Distance")
+
+initPar=c(20,15, 1, rep(0, nKnots-1), 175, 1)
+# initPar=c(16.81,13.63, -1.168, -0.238, 3.871, 2.477, 1.005, 153, 1)
+fit = fitModel2(initParams=initPar, dStar=dStar, gpsDat=threshSlipDat,
+                useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+                fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+                normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE)
+fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
+                useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+                fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+                normalModel=TRUE, normalizeTaper=TRUE, doHess=TRUE, 
+                finalFit=TRUE, anisotropic=TRUE)
+out = parametricBootstrap(optParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
+                          useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+                          fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+                          normalModel=TRUE, normalizeTaper=TRUE, doHess=TRUE, 
+                          finalFit=TRUE, anisotropic=TRUE)
+
+
+# test different taper depth thresholds
+depthThresh=21000
+nKnots = 5
+nKnotsGPS = 5
+dStars=seq(21000, 35000, by=2000)
+set.seed(123)
+threshSlipDat = slipDatCSZ[slipDatCSZ$Depth<depthThresh,]
+threshSlipDat$slipErr = threshSlipDat$slipErr*3
+minLat = min(c(csz$latitude, threshSlipDat$lat)) - .001
+maxLat = max(c(csz$latitude, threshSlipDat$lat)) + .001
+
+# inflate the subsidence uncertainty
+highQual = as.numeric(dr1$quality) == 1
+lowQual = as.numeric(dr1$quality) != 1
+lowInflate=1.75
+lowInflateComb=1.75
+lowInflateDiff=1.75
+highInflate=1.25
+highInflateComb=1.25
+highInflateDiff=1.25
+inflateDr1=dr1
+inflateDr1$Uncertainty[lowQual] = inflateDr1$Uncertainty[lowQual]*lowInflateComb
+inflateDr1$Uncertainty[highQual] = inflateDr1$Uncertainty[highQual]*highInflateComb
+
+# initPar=c(20,15, 1, rep(0, nKnots-1), 175, 1)
+initPar=c(16.81,13.63, -1.168, -0.238, 3.871, 2.477, 1.005, 153, 1)
+LLs = c()
+LLsSub = c()
+LLsGPS = c()
+for(i in 1:length(dStars)) {
+  dStar = dStars[i]
+  fit = fitModel2(initParams=initPar, dStar=dStar, gpsDat=threshSlipDat,
+                  useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+                  fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+                  normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE, 
+                  doGammaSpline=TRUE, nKnotsGamma=7)
+  
+  LLs[i] = fit$logLikMLE
+  LLsSub[i] = fit$optimTable[nrow(fit$optimTable), ncol(fit$optimTable)-3]
+  initPar = fit$optPar
+}
+LLsGPS = LLs - LLsSub
+cbind(dStars, LLsGPS, LLsSub, LLs)
+
+# without gamma spline:
+# > cbind(dStars, LLsGPS, LLsSub, LLs)
+# dStars    LLsGPS    LLsSub       LLs
+# [1,]  22000 -377.0368 -368.6287 -745.6655
+# [2,]  24000 -334.5367 -365.5357 -700.0724
+# [3,]  26000 -305.1014 -369.5840 -674.6854
+# [4,]  28000 -273.6950 -382.5389 -656.2339
+# [5,]  30000 -253.4194 -390.1221 -643.5414
+
+
+# without combined taper depth (25k), with constant gamma:
+# > fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat,
+#                   +                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                   +                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                   +                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE, 
+#                   +                 doGammaSpline=FALSE, nKnotsGamma=nKnotsGamma)
+#        muZeta sigmaZeta   beta1  beta2 beta3 beta4  beta5    phi  alpha      LL   subLL   GPSLL priorLL LLSE
+# newRow 17.546    12.065 -2.5654 1.3853 5.051 4.364 1.7724 143.07 1.2041 -685.62 -367.17 -318.44       0    0
+
+# with combined taper depth (25k, 40k), with constant gamma:
+# > fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat,
+#                   +                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                   +                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                   +                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE, 
+#                   +                 doGammaSpline=FALSE, nKnotsGamma=nKnotsGamma)
+#        muZeta sigmaZeta    beta1   beta2  beta3  beta4    beta5    phi  alpha      LL   subLL   GPSLL priorLL LLSE
+# newRow 12.811     18.39 -0.96289 -1.0156 4.3793 3.0961 -0.72465 228.34 1.1858 -582.24 -357.95 -224.29       0    0
+
+# with combined taper depth (25k, 40k), with variable gamma:
+# > fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat,
+#                   +                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                   +                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                   +                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE, 
+#                   +                 doGammaSpline=TRUE, nKnotsGamma=nKnotsGamma)
+#        muZeta sigmaZeta  beta1   beta2  beta3   beta4   beta5    phi  alpha      LL   subLL   GPSLL priorLL LLSE
+# newRow 13.697    20.132 0.4478 -2.7265 3.6905 0.31088 -2.9042 234.29 1.1443 -520.48 -358.06 -162.42       0    0
+
+# with combined taper depth (25k, 30k), with variable gamma:
+# > fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat,
+#                   +                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                   +                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                   +                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE, 
+#                   +                 doGammaSpline=TRUE, nKnotsGamma=nKnotsGamma)
+#        muZeta sigmaZeta  beta1   beta2  beta3   beta4   beta5    phi  alpha      LL   subLL   GPSLL priorLL LLSE
+# newRow 13.697    20.132 0.4478 -2.7265 3.6905 0.31088 -2.9042 234.29 1.1443 -520.48 -358.06 -162.42       0    0
+
+## now do the same but for the separate taper model
+# without different taper depth (25k), with constant gamma:
+# > fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
+#                   +                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                   +                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                   +                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, 
+#                   +                 diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, anisotropic=TRUE)
+#        muZeta sigmaZeta  beta1   beta2   beta3   beta4   beta5 beta'1  beta'2 beta'3  beta'4  beta'5    phi  alpha     LL   subLL   GPSLL priorLL
+# newRow 16.527      7.73 6.3686 -11.716 0.33882 -6.5505 -1.3715 5.5243 -13.764 7.5433 -10.087 0.58627 127.17 1.1655 -598.6 -294.86 -303.74       0
+
+# with different taper depth (25k, 40k), with constant gamma:
+# fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
+#                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, 
+#                 diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, anisotropic=TRUE, doGammaSpline=FALSE, nKnotsGamma=nKnotsGamma, 
+#                 dStarGPS=dStarGPS)
+#        muZeta sigmaZeta  beta1   beta2   beta3  beta4   beta5 beta'1  beta'2 beta'3  beta'4 beta'5    phi  alpha      LL   subLL
+# newRow 6.7134    13.661 6.2682 -11.747 0.51293 -6.443 -1.3038 5.5722 -12.648 4.7085 -10.833 1.1855 289.13 1.1791 -525.23 -317.91
+#          GPSLL priorLL LLSE
+# newRow -207.32       0    0
+
+# with different taper depth (25k, 40k), with variable gamma:
+# fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
+#                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
+#                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
+#                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, 
+#                 diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, anisotropic=TRUE, doGammaSpline=TRUE, nKnotsGamma=nKnotsGamma, 
+#                 dStarGPS=dStarGPS)
+#        muZeta sigmaZeta  beta1   beta2   beta3   beta4   beta5 beta'1  beta'2 beta'3  beta'4  beta'5    phi  alpha      LL
+# newRow 8.1547    13.183 6.2833 -11.701 0.46323 -6.4524 -1.2908 6.8193 -13.363 1.6512 -8.2248 0.36884 255.03 1.1357 -452.46
+#          subLL  GPSLL priorLL LLSE
+# newRow -315.85 -136.6       0    0
+
+
+
+
+
+
+
+
+
+
+
+
+

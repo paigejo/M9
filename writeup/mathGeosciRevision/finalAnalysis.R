@@ -41,7 +41,6 @@ ny=  900
 lonGrid = seq(lonRange[1], lonRange[2], l=nx)
 latGrid = seq(latRange[1], latRange[2], l=ny)
 G = okadaAll(csz, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=0.25)
-fauxG = getFauxG()
 
 ## set up down-dip slip limit and gps dataset: set threshold, match error with 
 ## empirical estimates from Pollitz and Evans (2017)
@@ -49,11 +48,13 @@ depthThresh=21000
 nKnots = 5
 nKnotsGPS = 5
 dStar=25000
+dStarGPS=40000
 set.seed(123)
 threshSlipDat = slipDatCSZ[slipDatCSZ$Depth<depthThresh,]
 threshSlipDat$slipErr = threshSlipDat$slipErr*3
 minLat = min(c(csz$latitude, threshSlipDat$lat)) - .001
 maxLat = max(c(csz$latitude, threshSlipDat$lat)) + .001
+nKnotsGamma=7
 
 ## calculate inflations for high and low quality subsidence data (under combined model)
 highQual = as.numeric(dr1$quality) == 1
@@ -68,6 +69,10 @@ for(i in 1:length(inflates)) {
   for(j in 1:length(inflates)) {
     lowInflate = inflates[j]
     
+    print(paste0("lowInflate: ", lowInflate, "; highInflate: ", highInflate))
+    print(paste0("highInflate: ", i, "/", length(inflates), "; lowInflate: ", j, "/", length(inflates)))
+    print(paste0("run ", (i - 1) * length(inflates) + j, "/", length(inflates)^2))
+    
     inflateDR1 = dr1
     inflateDR1$Uncertainty[highQual] = dr1$Uncertainty[highQual] * highInflate
     inflateDR1$Uncertainty[lowQual] = dr1$Uncertainty[lowQual] * lowInflate
@@ -77,7 +82,8 @@ for(i in 1:length(inflates)) {
                     useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, 
                     fauxG=fauxG, subDat=inflateDR1, fault=csz, 
                     normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, 
-                    latRange=c(minLat, maxLat), corGPS=TRUE, anisotropic=TRUE)
+                    latRange=c(minLat, maxLat), corGPS=TRUE, anisotropic=TRUE, 
+                    verbose=FALSE)
     endPar = fit$MLEs
     endPar = c(endPar[2], endPar[3], endPar[6:length(endPar)])
     
@@ -87,6 +93,7 @@ for(i in 1:length(inflates)) {
     
     # print results:
     print(paste0("Low inflate: ", lowInflate, ".  High inflate: ", highInflate, ".  LnLik: ", LLs[i,j], ".  LnLikSub: ", LLsSub[i,j]))
+    print(endPar)
   }
 }
 save(inflates=inflates, LLs=LLs, LLsSub, 
@@ -98,10 +105,10 @@ save(inflates=inflates, LLs=LLs, LLsSub,
 par(mfrow=c(1,1))
 highInflatesMat = matrix(rep(rev(inflates), length(inflates)), nrow=length(inflates))
 lowInflatesMat = t(highInflatesMat)
-tmp = LLsSub
+tmp = LLs
 LLs2 = t(matrix(rev(tmp), nrow=nrow(tmp)))
 # image(lowInflatesMat, highInflatesMat, LLs2, col=tim.colors())
-pdf(file="inflationComb.pdf", width=5, height=5)
+pdf(file="inflationCombRevised.pdf", width=5, height=5)
 image.plot(rev(inflates), rev(inflates), LLs2, col=tim.colors(), 
            main="", xlab="Low Quality Inflation", 
            ylab="High Quality Inflation")
@@ -124,6 +131,10 @@ for(i in 1:length(inflates)) {
   for(j in 1:length(inflates)) {
     lowInflate = inflates[j]
     
+    print(paste0("lowInflate: ", lowInflate, "; highInflate: ", highInflate))
+    print(paste0("highInflate: ", i, "/", length(inflates), "; lowInflate: ", j, "/", length(inflates)))
+    print(paste0("run ", (i - 1) * length(inflates) + j, "/", length(inflates)^2))
+    
     inflateDR1 = dr1
     inflateDR1$Uncertainty[highQual] = dr1$Uncertainty[highQual] * highInflate
     inflateDR1$Uncertainty[lowQual] = dr1$Uncertainty[lowQual] * lowInflate
@@ -133,7 +144,8 @@ for(i in 1:length(inflates)) {
                     useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, 
                     fauxG=fauxG, subDat=inflateDR1, fault=csz, corGPS=TRUE, 
                     normalModel=TRUE, normalizeTaper=TRUE, latRange=c(minLat, maxLat), 
-                    doHess=FALSE, diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, anisotropic=TRUE)
+                    doHess=FALSE, diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, anisotropic=TRUE, 
+                    verbose=FALSE)
     endPar = fit$MLEs
     endPar = c(endPar[2], endPar[3], endPar[6:length(endPar)])
     
@@ -146,7 +158,7 @@ for(i in 1:length(inflates)) {
   }
 }
 save(inflates=inflates, LLs=LLs, LLsSub, 
-     file="inflatesFinalDiff.RData")
+     file="inflatesFinalDiffRevised.RData")
 
 # now plot results, calculate MLEs for inflation rates.  Rows of LLs correspond to highInflates
 # 1.75 for low, 1 for high quality inflation, no matter whether using the full or subsidence log-likelihood!
@@ -188,27 +200,29 @@ inflateDr1$Uncertainty[highQual] = inflateDr1$Uncertainty[highQual]*highInflateC
 ## fit the model (twice, with second time on smaller parameter scale to ensure 
 ## near optimum for hessian calculations)
 initPar=c(20,15, 1, rep(0, nKnots-1), 175, 1)
-initPar=c(16.81,13.63, -1.168, -0.238, 3.871, 2.477, 1.005, 153, 1)
-fit = fitModel2(initParams=initPar, dStar=dStar, gpsDat=threshSlipDat, 
+# initPar=c(16.81,13.63, -1.168, -0.238, 3.871, 2.477, 1.005, 153, 1)
+fit = fitModel2(initParams=initPar, dStar=dStar, gpsDat=threshSlipDat,
                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
-                normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE)
+                normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, anisotropic=TRUE, 
+                doGammaSpline=FALSE, nKnotsGamma=nKnotsGamma)
 fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
                 normalModel=TRUE, normalizeTaper=TRUE, doHess=TRUE, 
-                finalFit=TRUE, anisotropic=TRUE)
-fitComb = fit
-save(fitComb, file="finalFitComb.RData")
-load("finalFitComb.RData")
+                finalFit=TRUE, anisotropic=TRUE, doGammaSpline=TRUE, nKnotsGamma=nKnotsGamma, 
+                dStarGPS=dStarGPS)
+#fitComb = fit
+save(fitComb, file="finalFitCombRevised.RData")
+load("finalFitCombRevised.RData")
 
 # make parameter table
 params = fitComb$MLEs
-MLEs = c(params[c(2, 3, 5, 6:(5+nKnots))], rep(NA, nKnotsGPS), params[length(params)], lowInflate, highInflate)
+MLEs = c(params[c(2, 3, 5, 6:(5+nKnots))], rep(NA, nKnotsGPS), params[(length(params) - 1):length(params)], lowInflate, highInflate)
 SEs = sqrt(diag(solve(-fitComb$hess)))
-SEs = c(SEs[1:2], NA, SEs[3:(length(SEs)-1)], rep(NA, nKnotsGPS), SEs[length(SEs)], NA, NA)
+SEs = c(SEs[1:2], NA, SEs[3:(length(SEs)-2)], rep(NA, nKnotsGPS), SEs[(length(SEs) - 1):length(SEs)], NA, NA)
 tabComb = rbind(MLEs, SEs)
-colnames(tabComb) = c("muZ", "sigmaZ", "gamma", paste0("beta", 1:nKnots), paste0("beta'", 1:nKnotsGPS), "phi", "psil", "psih")
+colnames(tabComb) = c("muZ", "sigmaZ", "gamma", paste0("beta", 1:nKnots), paste0("beta'", 1:nKnotsGPS), "phi", "alpha", "psil", "psih")
 rownames(tabComb) = c("MLEs", "SEs")
 library(xtable)
 xtable(tabComb, digits=3)
@@ -219,7 +233,7 @@ T1Dat = inflateDr1[isT1,]
 GT1 = G[isT1, ]
 
 params = fitComb$MLEs
-splinePar = params[6:(length(params)-1)]
+splinePar = params[6:(length(params)-2)]
 Xi = getSplineBasis(csz, c(40,50), 5)
 lambdas = Xi %*% splinePar
 tvec = getTaperSpline(splinePar, nKnots=nKnots, dStar=dStar, fault=csz, normalize=TRUE)
@@ -227,7 +241,7 @@ plotFault(csz, tvec)
 
 normalPreds = predsGivenSubsidence(params, fault=csz, subDat=T1Dat, niter=1000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=FALSE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = normalPreds$zetaEsts * tvec
@@ -244,13 +258,11 @@ slipPreds = list(meanSlip=muAreal, slipSims=slipSims)
 
 # plot results:
 ggplotFixedSlip(muAreal, NULL, l95Areal, u95Areal, sdAreal, event="T1", plotNameRoot="T1 ", logScale=FALSE, 
-                fileNameRoot=paste0("finalT1Comb"))
+                fileNameRoot=paste0("finalT1CombRevised"))
 ggComparePredsToSubs(params, slipPreds=slipPreds, G=GT1, tvec=tvec, plotNameRoot="T1", 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("finalT1Comb"), 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("finalT1CombRevised"), 
                      fault=csz, normalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
-                     dStar=dStar, normalizeTaper=TRUE)
-
-
+                     dStar=dStar, normalizeTaper=TRUE, anisotropic=TRUE)
 
 ### for different taper model:
 # inflate the subsidence uncertainty
@@ -264,20 +276,21 @@ inflateDr1$Uncertainty[highQual] = inflateDr1$Uncertainty[highQual]*highInflateD
 
 ## fit the model (twice, with second time on smaller parameter scale to ensure 
 ## near optimum for hessian calculations)
-initPar=c(20,15, 1, rep(0, nKnots + nKnotsGPS -1), 175)
+initPar=c(20,15, 1, rep(0, nKnots + nKnotsGPS -1), 175, 1)
 fit = fitModel2(initParams=initPar, dStar=dStar, gpsDat=threshSlipDat, 
                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
                 normalModel=TRUE, normalizeTaper=TRUE, doHess=FALSE, 
-                diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS)
+                diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, anisotropic=TRUE)
 fit = fitModel2(initParams=fit$optPar, dStar=dStar, gpsDat=threshSlipDat, 
                 useGrad=TRUE, nKnots=nKnots, maxit=500, G=G, corGPS=TRUE, 
                 fauxG=fauxG, subDat=inflateDr1, fault=csz, latRange=c(minLat, maxLat), 
                 normalModel=TRUE, normalizeTaper=TRUE, doHess=TRUE, 
-                diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, finalFit=TRUE)
+                diffGPSTaper=TRUE, nKnotsGPS=nKnotsGPS, finalFit=TRUE, 
+                anisotropic=TRUE, doGammaSpline=TRUE, nKnotsGamma=nKnotsGamma)
 fitDiff = fit
-save(fitDiff, file="finalFitDiff.RData")
-load("finalFitDiff.RData")
+save(fitDiff, file="finalFitDiffRevised.RData")
+load("finalFitDiffRevised.RData")
 
 ## make parameter table
 params = fitDiff$MLEs
@@ -285,7 +298,7 @@ MLEs = c(params[c(2, 3, 5, 6:length(params))], lowInflate, highInflate)
 SEs = sqrt(diag(solve(-fitDiff$hess)))
 SEs = c(SEs[1:2], NA, SEs[3:length(SEs)], NA, NA)
 tabDiff = rbind(MLEs, SEs)
-colnames(tabDiff) = c("muZ", "sigmaZ", "gamma", paste0("beta", 1:nKnots), paste0("beta'", 1:nKnotsGPS), "phi", "psil", "psih")
+colnames(tabDiff) = c("muZ", "sigmaZ", "gamma", paste0("beta", 1:nKnots), paste0("beta'", 1:nKnotsGPS), "phi", "alpha", "psil", "psih")
 rownames(tabDiff) = c("MLEs", "SEs")
 library(xtable)
 xtable(tabDiff, digits=3)
@@ -316,46 +329,49 @@ plotSplineFit = function(fit, nKnotsGPS=0, useDiffGPSTaper=FALSE, uncertaintyBan
   covMat = solve(-fit$hess)
   splineParI = 3:(2+nKnots+nKnotsGPS)
   splineCovMat = covMat[splineParI, splineParI]
-  ggplotSplineUncertainty(fit$optPar[splineParI], splineCovMat, nKnots, 
-                          diffGPSTaper=useDiffGPSTaper, nKnotsGPS=nKnotsGPS, latsOnX=FALSE, main="", 
+  ggplotSplineUncertainty(fit$optPar[splineParI], splineCovMat, nKnots,
+                          diffGPSTaper=useDiffGPSTaper, nKnotsGPS=nKnotsGPS, latsOnX=FALSE, main="",
                           uncertaintyBands=uncertaintyBands)
+  # ggplotTaperDepthUncertainty(fit$optPar[splineParI], splineCovMat, nKnots,
+  #                             diffGPSTaper=useDiffGPSTaper, nKnotsGPS=nKnotsGPS, latsOnX=FALSE,
+  #                             uncertaintyBands=uncertaintyBands, depthFrac=.9, confLevel=.95, dStar=dStar)
 }
 
-pdf(file="taperComparison.pdf", width=8, height=10)
-p1= plotSplineFit(fitComb, uncertaintyBands=FALSE) + 
-  coord_fixed(xlim = c(-1.5,1.75),  ylim = c(40,50), ratio = 1, expand=FALSE) + 
-  scale_x_continuous(TeX("$\\lambda$"), c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) + 
+pdf(file="taperComparisonRevised.pdf", width=8, height=10)
+p1= plotSplineFit(fitComb, uncertaintyBands=FALSE) +
+  coord_fixed(xlim = c(-1.5,1.75),  ylim = c(40,50), ratio = 1, expand=FALSE) +
+  scale_x_continuous(TeX("$\\lambda$"), c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) +
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(), 
-        panel.background = element_rect(fill='white'), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill='white'),
         plot.margin=unit(c(0,-4,0,-1), "cm"))
-p2 = ggPlotFaultDat(csz, fitComb$tvec, c(0,1), main="", ylim=c(40,50)) + 
+p2 = ggPlotFaultDat(csz, fitComb$tvec, c(0,1), main="", ylim=c(40,50), clab="Taper", lwd=.5) + 
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
         panel.background = element_rect(fill='lightblue1'), 
         plot.margin=unit(c(0,-1,0,-3), "cm"))
 
-p3=plotSplineFit(fitSub, uncertaintyBands=FALSE) + 
-  coord_fixed(xlim = c(-1,6.5),  ylim = c(40,50), ratio = 2.5, expand=FALSE) + 
-  scale_x_continuous(TeX("$\\lambda$"), seq(0,6, by=2), labels=c("0", "2", "4", "6"), limits=c(-360, 360)) + 
+p3=plotSplineFit(fitSub, uncertaintyBands=FALSE) +
+  coord_fixed(xlim = c(-1,6.5),  ylim = c(40,50), ratio = 2.5, expand=FALSE) +
+  scale_x_continuous(TeX("$\\lambda$"), seq(0,6, by=2), labels=c("0", "2", "4", "6"), limits=c(-360, 360)) +
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(), 
-        panel.background = element_rect(fill='white'), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill='white'),
         plot.margin=unit(c(0,-4,0,-1), "cm"))
-p4=ggPlotFaultDat(csz, fitSub$tvec, c(0,1), main="",  ylim = c(40,50)) + 
+p4=ggPlotFaultDat(csz, fitSub$tvec, c(0,1), main="",  ylim = c(40,50), clab="Taper", lwd=.5) + 
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
         panel.background = element_rect(fill='lightblue1'), 
         plot.margin=unit(c(0,-1,0,-3), "cm"))
 
-p5=plotSplineFit(fitGPS, nKnotsGPS, useDiffGPSTaper=TRUE, uncertaintyBands=FALSE) + 
-  coord_fixed(xlim = c(-1.5,1.5),  ylim = c(40,50), ratio = 1, expand=FALSE) + 
-  scale_x_continuous(TeX("$\\lambda$"), c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) + 
+p5=plotSplineFit(fitGPS, nKnotsGPS, useDiffGPSTaper=TRUE, uncertaintyBands=FALSE) +
+  coord_fixed(xlim = c(-1.5,1.5),  ylim = c(40,50), ratio = 1, expand=FALSE) +
+  scale_x_continuous(TeX("$\\lambda$"), c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) +
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(), 
-        panel.background = element_rect(fill='white'), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill='white'),
         plot.margin=unit(c(0,-4,0,-1), "cm"))
-p6=ggPlotFaultDat(csz, fitGPS$tvec, c(0,1), main="",  ylim = c(40,50)) + 
+p6=ggPlotFaultDat(csz, fitGPS$tvec, c(0,1), main="",  ylim = c(40,50), clab="Taper", lwd=.5) + 
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
         panel.background = element_rect(fill='lightblue1'), 
@@ -371,8 +387,8 @@ dev.off()
 ###################################
 # plot normalized residuals
 
-pdf(file="residuals.pdf", width=8, height=10)
-pl1 = ggplotLockingResiduals(fitComb, fitComb$tvecGPS, threshSlipDat, c(minLat, maxLat)) + 
+pdf(file="residualsRevised.pdf", width=8, height=10)
+pl1 = ggplotLockingResiduals(fitComb, fitComb$tvecGPS, threshSlipDat, c(minLat, maxLat), doGammaSpline=TRUE) + 
   scale_x_continuous("Normalized Residuals", c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) + 
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
@@ -385,7 +401,7 @@ pl2 = ggplotSubsidenceResiduals(fitComb, fitComb$tvec, inflateDr1, G, c(minLat, 
         panel.background = element_rect(fill='white'), 
         plot.margin=unit(c(.5,-1,.5,-1), "cm"))
 
-pl3 = ggplotLockingResiduals(fitSub, fitSub$tvecGPS, threshSlipDat, c(minLat, maxLat)) + 
+pl3 = ggplotLockingResiduals(fitSub, fitSub$tvecGPS, threshSlipDat, c(minLat, maxLat), doGammaSpline=TRUE) + 
   scale_x_continuous("Normalized Residuals", c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) + 
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
@@ -398,7 +414,7 @@ pl4 = ggplotSubsidenceResiduals(fitSub, fitSub$tvec, inflateDr1, G, c(minLat, ma
         panel.background = element_rect(fill='white'), 
         plot.margin=unit(c(.5,-1,.5,-1), "cm"))
 
-pl5 = ggplotLockingResiduals(fitGPS, fitGPS$tvecGPS, threshSlipDat, c(minLat, maxLat)) + 
+pl5 = ggplotLockingResiduals(fitGPS, fitGPS$tvecGPS, threshSlipDat, c(minLat, maxLat), doGammaSpline=TRUE) + 
   scale_x_continuous("Normalized Residuals", c(-1, 0, 1), labels=c("-1", "0", "1"), limits=c(-360, 360)) + 
   theme(panel.border = element_blank(), panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
@@ -413,7 +429,9 @@ pl6 = ggplotSubsidenceResiduals(fitGPS, fitGPS$tvec, inflateDr1, G, c(minLat, ma
 multiplot(pl1, pl2, pl3, pl4, pl5, pl6, byrow=TRUE, cols=2)
 dev.off()
 
-
+# save progress
+save.image("finalAnalysis1.RData")
+load("finalAnalysis1.RData")
 
 ###################################
 ###################################
@@ -423,19 +441,14 @@ dev.off()
 
 fitList = list(fitComb, fitSub, fitGPS)
 ggCompareModels(fitList, nsim=20000, G=G, latRange=c(minLat, maxLat), magRange=c(8.5, 9.5), lwd=.2, 
-                magTicks=seq(8.6, 9.4, by=.2), plotSubPreds=TRUE, plotNameRoot="subPreds", 
-                subPredMeanRange=c(-3,2.3), varRange=c(0, 18))
+                magTicks=seq(8.6, 9.4, by=.2), plotSubPreds=TRUE, plotNameRoot="subPredsRevised", 
+                subPredMeanRange=c(-3,2.3), varRange=c(0, 18), anisotropic=TRUE)
 ggCompareModels(fitList, nsim=5000, G=G, latRange=c(minLat, maxLat), magRange=c(8.5, 9.5), lwd=.2, 
                 magTicks=seq(8.6, 9.4, by=.2), plotSubPreds=TRUE, subPredMeanRange=c(-4,2.3),
-                plotNameRoot="subPredsPN", posNormalModel=rep(TRUE, 3), varRange=c(0, 25))
-adjustedMeans = c(adjustedMuComb, adjustedMuSub, adjustedMuGPS)
-ggCompareModels(fitList, nsim=20000, G=G, latRange=c(minLat, maxLat), magRange=c(8.5, 9.5), lwd=.2, 
-                magTicks=seq(8.6, 9.4, by=.2), plotSubPreds=TRUE, subPredMeanRange=c(-3,2.3),
-                plotNameRoot="subPredsPNAdj", posNormalModel=rep(TRUE, 3), adjustedMeans=adjustedMeans, 
-                varRange=c(0, 18))
+                plotNameRoot="subPredsPNRevised", posNormalModel=rep(TRUE, 3), varRange=c(0, 25), 
+                anisotropic=TRUE)
 
-# really I should just make 3 3x3 grids with all of the above info
-
+# the positive normal mean adjusted results are calculated on line 885
 
 ###################################
 ###################################
@@ -445,16 +458,19 @@ ggCompareModels(fitList, nsim=20000, G=G, latRange=c(minLat, maxLat), magRange=c
 
 # first genereate slip and subsidence simulations:
 slipPredsComb = preds(fitComb$MLEs, nsim=10000, fault=csz, tvec=fitComb$tvec, 
-                      posNormalModel=FALSE, normalModel=TRUE, phiZeta=fitComb$MLEs[length(fitComb$MLEs)])
-subPredsComb = predsToSubsidence(fitComb$MLEs, slipPreds, G=G, useMVNApprox=FALSE, subDat=inflateDr1, 
-                                 posNormalModel=FALSE, normalModel=TRUE, tvec=fitComb$tvec)
+                      posNormalModel=FALSE, normalModel=TRUE, phiZeta=fitComb$MLEs[length(fitComb$MLEs)-1], 
+                      anisotropic=TRUE, taperedGPSDat=TRUE)
+subPredsComb = predsToSubsidence(fitComb$MLEs, slipPredsComb, G=G, useMVNApprox=FALSE, subDat=inflateDr1, 
+                                 posNormalModel=FALSE, normalModel=TRUE, tvec=fitComb$tvec, dStar=dStar)
 
 slipPredsSub = preds(fitSub$MLEs, nsim=10000, fault=csz, tvec=fitSub$tvec, 
-                     posNormalModel=FALSE, normalModel=TRUE, phiZeta=fitSub$MLEs[length(fitSub$MLEs)])
-subPredsSub = predsToSubsidence(fitSub$MLEs, slipPreds, G=G, useMVNApprox=FALSE, subDat=inflateDr1, 
-                                posNormalModel=FALSE, normalModel=TRUE, tvec=fitSub$tvec)
+                     posNormalModel=FALSE, normalModel=TRUE, phiZeta=fitSub$MLEs[length(fitSub$MLEs)-1], 
+                     anisotropic=TRUE, taperedGPSDat=TRUE)
+subPredsSub = predsToSubsidence(fitSub$MLEs, slipPredsSub, G=G, useMVNApprox=FALSE, subDat=inflateDr1, 
+                                posNormalModel=FALSE, normalModel=TRUE, tvec=fitSub$tvec, 
+                                dStar=dStar)
 
-# now compute summary statistics for slip for combinaed and subsidence models
+# now compute summary statistics for slip for combined and subsidence models
 lowComb = apply(slipPredsComb$slipSims, 1, quantile, probs=.2)
 hiComb = apply(slipPredsComb$slipSims, 1, quantile, probs=.8)
 meanComb = rowMeans(slipPredsComb$slipSims)
@@ -472,17 +488,18 @@ for(i in 1:length(allPlots)) {
           panel.background = element_rect(fill='lightblue1'), 
           plot.margin=unit(c(0,0,0,0), "cm"))
 }
-pdf(file=paste0("Summary", "SlipGrid.pdf"), width=8, height=10)
+pdf(file=paste0("Summary", "SlipGridRevised.pdf"), width=8, height=10)
 multiplot(plotlist=allPlots, cols=3, byrow=TRUE)
 dev.off()
 
-# now plot some simulations against the data:
+# now plot some simulations against the data
+# (`subsidences' are uplifts so must take negative):
 
-ggplotSlipGrid(slipPredsComb$slipSims[,1:9], nc=3, fileNameRoot="comb")
-ggplotSubsidenceGrid(allSubsComb$subSims[,1:9], nc=3, fileNameRoot="comb")
+ggplotSlipGrid(slipPredsComb$slipSims[,1:9], nc=3, fileNameRoot="combRevised")
+ggplotSubsidenceGrid(-subPredsComb$subSims[,1:9], nc=3, fileNameRoot="combRevised")
 
-ggplotSlipGrid(slipPredsSub$slipSims[,1:9], nc=3, fileNameRoot="sub")
-ggplotSubsidenceGrid(allSubsSub$subSims[,1:9], nc=3, fileNameRoot="sub")
+ggplotSlipGrid(slipPredsSub$slipSims[,1:9], nc=3, fileNameRoot="subRevised")
+ggplotSubsidenceGrid(-subPredsSub$subSims[,1:9], nc=3, fileNameRoot="subRevised")
 
 ###################################
 ###################################
@@ -501,7 +518,7 @@ tvec = fitComb$tvec
 # generate T1 predictive distributions
 normalPreds = predsGivenSubsidence(fitComb$MLEs, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=FALSE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = normalPreds$zetaEsts * tvec
@@ -518,17 +535,18 @@ slipPredsComb = list(meanSlip=muAreal, slipSims=slipSims)
 
 # plot results:
 ggComparePredsToSubs(fitComb$MLEs, slipPreds=slipPredsComb, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1"), 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1Revised"), 
                      fault=csz, normalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
-                     dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, magLimits=c(8.8, 9.2))
+                     dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, magLimits=c(8.8, 9.2), 
+                     anisotropic=TRUE)
 
 ## combined model (posnormal):
 tvec = fitComb$tvec
 
-# generate T1 predictive distributions
+# generate T1 predictive distributions (niter * 2 = 20000 simulations)
 posnormalPreds = predsGivenSubsidence(fitComb$MLEs, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=TRUE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = posnormalPreds$zetaEsts * tvec
@@ -545,9 +563,9 @@ slipPreds = list(meanSlip=muAreal, slipSims=slipSims)
 
 # plot results:
 ggComparePredsToSubs(fitComb$MLEs, slipPreds=slipPreds, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1posN"), 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("combT1posNRevised"), 
                      fault=csz, normalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
-                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE)
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE, anisotropic=TRUE)
 
 ## subsidence model (normal):
 tvec = fitSub$tvec
@@ -555,7 +573,7 @@ tvec = fitSub$tvec
 # generate T1 predictive distributions
 normalPreds = predsGivenSubsidence(fitSub$MLEs, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=FALSE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = normalPreds$zetaEsts * tvec
@@ -572,9 +590,10 @@ slipPredsSub = list(meanSlip=muAreal, slipSims=slipSims)
 
 # plot results:
 ggComparePredsToSubs(fitSub$MLEs, slipPreds=slipPredsSub, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("subT1"), 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("subT1Revised"), 
                      fault=csz, normalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
-                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE, magLimits=c(8.8, 9.2))
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE, magLimits=c(8.8, 9.2), 
+                     anisotropic=TRUE)
 
 ## subsidence model (posnormal):
 tvec = fitSub$tvec
@@ -582,7 +601,7 @@ tvec = fitSub$tvec
 # generate T1 predictive distributions
 posnormalPreds = predsGivenSubsidence(fitSub$MLEs, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=TRUE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = posnormalPreds$zetaEsts * tvec
@@ -599,9 +618,9 @@ slipPreds = list(meanSlip=muAreal, slipSims=slipSims)
 
 # plot results:
 ggComparePredsToSubs(fitSub$MLEs, slipPreds=slipPreds, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("subT1posN"), 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("subT1posNRevised"), 
                      fault=csz, normalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
-                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE)
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE, anisotropic=TRUE)
 
 ## locking taper model (normal): (just as a test to see that it doesn't work)
 tvec = fitGPS$tvec
@@ -609,7 +628,7 @@ tvec = fitGPS$tvec
 # generate T1 predictive distributions
 normalPreds = predsGivenSubsidence(fitGPS$MLEs, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=FALSE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = normalPreds$zetaEsts * tvec
@@ -626,9 +645,10 @@ slipPredsGPS = list(meanSlip=muAreal, slipSims=slipSims)
 
 # plot results:
 ggComparePredsToSubs(fitSub$MLEs, slipPreds=slipPredsGPS, G=GT1, tvec=tvec, plotNameRoot="T1 ", 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("gpsT1"), 
+                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("gpsT1Revised"), 
                      fault=csz, normalModel=TRUE, useMVNApprox=FALSE, taperedGPSDat=TRUE, 
-                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE, magLimits=c(8.8, 9.2))
+                     dStar=dStar, normalizeTaper=FALSE, noTitle=TRUE, magLimits=c(8.8, 9.2), 
+                     anisotropic=TRUE)
 
 ## make a table summarizing model mean magnitudes, 95% confidence band in magnitude
 slipSimsComb = slipPredsComb$slipSims
@@ -656,7 +676,7 @@ tvec = fitComb$tvec
 # generate T1 predictive distributions
 normalPreds = predsGivenSubsidence(fitComb$MLEs, fault=csz, subDat=T1Dat, niter=10000, G=GT1, prior=FALSE, tvec=tvec, 
                                    normalModel=TRUE, posNormalModel=FALSE, taperedGPSDat=TRUE, normalizeTaper=TRUE, 
-                                   dStar=dStar, gpsDat=threshSlipDat)
+                                   dStar=dStar, gpsDat=threshSlipDat, anisotropic=TRUE)
 
 # areal values of zeta
 muAreal = normalPreds$zetaEsts * tvec
@@ -675,23 +695,55 @@ subPreds = predsToSubsidence(fitComb$MLEs, slipPreds, csz, useMVNApprox = FALSE,
                              subDat=T1Dat, normalModel=TRUE, tvec=tvec, normalizeTaper=TRUE, 
                              dStar=dStar)
 
-ggplotSlipGrid(slipPreds$slipSims[,1:9], nc=3, fileNameRoot="combT1", lwd=.2)
-ggplotSubsidenceGrid(-subPreds$noiseSims[,1:9], nc=3, fileNameRoot="combT1", subDat=T1Dat)
+ggplotSlipGrid(slipPreds$slipSims[,1:9], nc=3, fileNameRoot="combT1Revised", lwd=.2)
+ggplotSubsidenceGrid(-subPreds$noiseSims[,1:9], nc=3, fileNameRoot="combT1Revised", subDat=T1Dat)
 
+
+# save progress
+save.image("finalAnalysis2.RData")
+load("finalAnalysis2.RData")
 
 ##### compute percent chance all slips positive for each model
 library(mvtnorm)
 library(tmvtnorm)
 params = fitComb$MLEs
-params = fitDiff$MLEs
+# params = fitDiff$MLEs
 muZeta = params[2]
 sigmaZeta = params[3]
-arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
-                             theta=params[length(params)], smoothness=3/2, 
-                             Distance="rdist.earth", Dist.args=list(miles=FALSE))
+alpha = params[length(params)]
+phiZeta = params[length(params) - 1]
+nuZeta=3 / 2
+# arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
+#                              theta=phiZeta, smoothness=3/2)
+
+### Rather than training the fault, we redefine an axis to be the strike access in Euclidean space
+### using a Lambert projection and PCA
+out = straightenFaultLambert()
+faultGeomStraight = out$fault
+scale = out$scale
+parameters = out$projPar
+transformation = out$transformation
+
+cszStraight = divideFault2(faultGeomStraight)
+centers = getFaultCenters(csz)[,1:2]
+newCenters = transformation(centers)
+cszStraight$centerX = newCenters[,1]
+cszStraight$centerY = newCenters[,2]
+
+# calculate along strike and along dip squared distances in kilometers
+strikeCoordsCSZ = cbind(0, cszStraight$centerY)
+dipCoordsCSZ = cbind(cszStraight$centerX, 0)
+squareStrikeDistCsz = rdist(strikeCoordsCSZ)^2
+squareDipDistCsz = rdist(dipCoordsCSZ)^2
+
+# compute gps, fault, and cross distance matrices
+distMatCSZComb = sqrt(alpha^2 * squareStrikeDistCsz + alpha^(-2) * squareDipDistCsz)
+coordsCSZ = cbind(cszStraight$longitude, cszStraight$latitude)
+arealCSZCor = stationary.cov(coordsCSZ, Covariance="Matern", theta=phiZeta, 
+                           smoothness=nuZeta, distMat = distMatCSZComb)
 arealCSZCov = arealCSZCor * sigmaZeta^2
-pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-muZeta, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(all pos)
-1- pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-muZeta, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(any neg)
+pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-muZeta, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(all pos) = (fitComb: 0.555679, fitDiff: 0.8202905)
+1- pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-muZeta, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(any neg) = (fitComb: 0.4457753, fitDiff: 0.1816371)
 
 ##### do a quick chisq test for the extra taper parameters
 1-pchisq(2*(fitDiff$logLikMLE - fitComb$logLikMLE), 5) # p-value is numerically 0...
@@ -704,40 +756,45 @@ params = fitComb$MLEs
 muZeta = params[2]
 sigmaZeta = params[3]
 tvec = fitComb$tvec
+nuZeta=3 / 2
 
 # compute covariance matrix
-arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
-                             theta=params[length(params)], smoothness=3/2, 
-                             Distance="rdist.earth", Dist.args=list(miles=FALSE))
-arealCSZCov = arealCSZCor * sigmaZeta^2
+# rather than using below code, use the same covariance as above
+# arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
+#                              theta=params[length(params)], smoothness=3/2, 
+#                              Distance="rdist.earth", Dist.args=list(miles=FALSE))
+# arealCSZCov = arealCSZCor * sigmaZeta^2
 
 # compute adjusted mean parameter
 adjustedMuComb = getPosNormMu(muZeta, arealCSZCov, startN=150, initNewMu=8)
 tempPar = params
 tempPar[2] = adjustedMuComb
-save(adjustedMuComb, file="adjustedMuComb.RData")
-load("adjustedMuComb.RData")
+save(adjustedMuComb, file="adjustedMuCombRevised.RData")
+load("adjustedMuCombRevised.RData")
 
 # compute probability all positive
-pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMu, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(all pos)
-1- pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMu, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(any neg)
+pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMuComb, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(all pos) (0.1458336)
+1- pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMuComb, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(any neg) (0.8534005)
 
 # get summary of predictions
 
 ggComparePredsToSubs(tempPar, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("combPNAdjusted"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("combPNAdjustedRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ggComparePredsToSubs(params, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("combPNUnadjusted"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("combPNUnadjustedRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ggComparePredsToSubs(params, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("combN"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("combNRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=FALSE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ### for subsidence marginal model:
 # get the parameters
@@ -745,11 +802,19 @@ params = fitSub$MLEs
 muZeta = params[2]
 sigmaZeta = params[3]
 tvec = fitSub$tvec
+phiZeta = params[length(params) - 1]
+alpha = params[length(params)]
+nuZeta=3 / 2
 
 # compute covariance matrix
-arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
-                             theta=params[length(params)], smoothness=3/2, 
-                             Distance="rdist.earth", Dist.args=list(miles=FALSE))
+# arealCSZCor = stationary.cov(cbind(csz$longitude, csz$latitude), Covariance="Matern", 
+#                              theta=params[length(params)], smoothness=3/2, 
+#                              Distance="rdist.earth", Dist.args=list(miles=FALSE))
+# arealCSZCov = arealCSZCor * sigmaZeta^2
+distMatCSZDiff = sqrt(alpha^2 * squareStrikeDistCsz + alpha^(-2) * squareDipDistCsz)
+coordsCSZ = cbind(cszStraight$longitude, cszStraight$latitude)
+arealCSZCor = stationary.cov(coordsCSZ, Covariance="Matern", theta=phiZeta, 
+                             smoothness=nuZeta, distMat = distMatCSZDiff)
 arealCSZCov = arealCSZCor * sigmaZeta^2
 
 # compute adjusted mean parameter
@@ -757,31 +822,35 @@ adjustedMuSub = getPosNormMu(muZeta, arealCSZCov, startN=nrow(csz), initNewMu=15
 tempPar = params
 tempPar[2] = adjustedMuSub
 adjustedMuGPS = adjustedMuSub
-save(adjustedMuSub, file="adjustedMuSub.RData")
-save(adjustedMuGPS, file="adjustedMuGPS.RData")
-load("adjustedMuSub.RData")
-load("adjustedMuGPS.RData")
+save(adjustedMuSub, file="adjustedMuSubRevised.RData")
+save(adjustedMuGPS, file="adjustedMuGPSRevised.RData")
+load("adjustedMuSubRevised.RData")
+load("adjustedMuGPSRevised.RData")
 
 # compute probability all positive
-pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMu, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(all pos)
-1- pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMu, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(any neg)
+adjustedMu = adjustedMuGPS
+pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMu, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(all pos) (0.000941532)
+1- pmvnorm(upper=rep(0, nrow(csz)), mean=rep(-adjustedMu, nrow(csz)), sigma=arealCSZCov, abseps=.00001) # P(any neg) (0.9990585)
 
 # get summary of predictions
 
 ggComparePredsToSubs(tempPar, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("subPNAdjusted"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("subPNAdjustedRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ggComparePredsToSubs(params, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("subPNUnadjusted"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("subPNUnadjustedRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ggComparePredsToSubs(params, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("subN"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("subNRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=FALSE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ### for GPS marginal model:
 # get the parameters
@@ -794,25 +863,39 @@ tvec = fitGPS$tvec
 load("adjustedMuGPS.RData")
 tempPar = params
 tempPar[2] = adjustedMuGPS
-save(adjustedMuGPS, file="adjustedMuGPS.RData")
 
 
 # get summary of predictions
 
 ggComparePredsToSubs(tempPar, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("gpsPNAdjusted"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("gpsPNAdjustedRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ggComparePredsToSubs(params, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("gpsPNUnadjusted"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("gpsPNUnadjustedRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=TRUE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
 
 ggComparePredsToSubs(params, G=G, tvec=tvec, plotNameRoot="", nsim=5000, 
-                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("gpsN"), 
+                     subDat=inflateDr1, logScale=FALSE, fileNameRoot=paste0("gpsNRevised"), 
                      fault=csz, normalModel=TRUE, posNormalModel=FALSE, useMVNApprox=FALSE, 
-                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE)
+                     taperedGPSDat=TRUE, dStar=dStar, normalizeTaper=TRUE, noTitle=TRUE, 
+                     anisotropic=TRUE)
+
+# finish the magnitude results started on line 439
+fitList = list(fitComb, fitSub, fitGPS)
+adjustedMeans = c(adjustedMuComb, adjustedMuSub, adjustedMuGPS)
+ggCompareModels(fitList, nsim=20000, G=G, latRange=c(minLat, maxLat), magRange=c(8.5, 9.5), lwd=.2, 
+                magTicks=seq(8.6, 9.4, by=.2), plotSubPreds=TRUE, subPredMeanRange=c(-3,2.3),
+                plotNameRoot="subPredsPNAdjRevised", posNormalModel=rep(TRUE, 3), adjustedMeans=adjustedMeans, 
+                varRange=c(0, 18), anisotropic=TRUE)
+
+# save progress
+save.image("finalAnalysis3.RData")
+load("finalAnalysis3.RData")
 
 ##### do Marginal dist'n Cross-Validation by site:
 ##### [(Marginal Normal, Marginal Pos. Normal, Marginal Pos. Normal Adjusted) x (Comb, Sub, GPS)] x (T1, T2, ..., AVG)
@@ -833,31 +916,31 @@ xtable(theseEventNs)
 source("posNormCV.R")
 
 # collect marginal CV results into table
-load("marginalCombCV.RData")
+load("marginalCombCVRevised.RData")
 margBiasTab = biasesComb
 margMSETab = MSEsComb
-load("marginalSubCV.RData")
+load("marginalSubCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesSub)
 margMSETab = rbind(margMSETab, MSEsComb)
-load("marginalGPSCV.RData")
+load("marginalGPSCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesGPS)
 margMSETab = rbind(margMSETab, MSEsGPS)
-load("marginalCombPNCV.RData")
+load("marginalCombPNCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesCombPN)
 margMSETab = rbind(margMSETab, MSEsCombPN)
-load("marginalSubPNCV.RData")
+load("marginalSubPNCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesSubPN)
 margMSETab = rbind(margMSETab, MSEsSubPN)
-load("marginalGPSPNCV.RData")
+load("marginalGPSPNCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesGPSPN)
 margMSETab = rbind(margMSETab, MSEsGPSPN)
-load("marginalCombPNAdjCV.RData")
+load("marginalCombPNAdjCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesCombPNAdj)
 margMSETab = rbind(margMSETab, MSEsCombPNAdj)
-load("marginalSubPNAdjCV.RData")
+load("marginalSubPNAdjCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesSubPNAdj)
 margMSETab = rbind(margMSETab, MSEsSubPNAdj)
-load("marginalGPSPNAdjCV.RData")
+load("marginalGPSPNAdjCVRevised.RData")
 margBiasTab = rbind(margBiasTab, biasesGPSPNAdj)
 margMSETab = rbind(margMSETab, MSEsGPSPNAdj)
 colnames(margBiasTab) = c("T1", "T2", "T3", "T4", "T5", "T6", "T7", "Avg")
@@ -909,6 +992,10 @@ rownames(predMSETab) = c("Comb", "Sub", "GPS", "CombPN", "SubPN", "GPSPN",
                          "CombPNAdj", "SubPNAdj", "GPSPNAdj")
 round(predMSETab, digits=3)
 xtable(t(predMSETab), digits=3)
+
+# save progress
+save.image("finalAnalysis4.RData")
+load("finalAnalysis4.RData")
 
 ## marginal magnitude table
 # combined taper model
@@ -1091,6 +1178,10 @@ tab = rbind(
 rownames(tab) = c("Combined", "Subsidence", "Locking")
 colnames(tab) = c("Mean", "95\\% CI", "")
 xtable(tab, digits=2)
+
+# save progress
+save.image("finalAnalysis5.RData")
+load("finalAnalysis5.RData")
 
 ##### Other plotting commands I once thought would be helpful:
 
