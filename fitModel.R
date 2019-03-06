@@ -2831,11 +2831,13 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
                        finalFit=FALSE, includeGammaSpline=FALSE, nKnotsGamma=5, includeInflation=FALSE) {
   parscale = rep(0, length(params))
   parNames = as.character(parscale)
+  parNamesTMB = as.character(parscale)
   
   ##### get parameters
   muZeta = params[1]
   parscale[1] = 2
   parNames[1] = "muZeta"
+  parNamesTMB[1] = "logmu"
   muVecCSZ = rep(muZeta, nrow(fault))
   muVecGPS = rep(muZeta, nrow(gpsDat))
   
@@ -2846,9 +2848,11 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
     varPar = NULL
     parscale[startI] = 2
     parNames[startI] = "sigmaZeta"
+    parNamesTMB[startI] = "betasdIntercept"
     taperPar = params[(startI + 1):(startI + nKnots + diffGPSTaper*nKnotsGPS)]
     parscale[(startI + 1):(startI+nKnots + diffGPSTaper*nKnotsGPS)] = rep(1, nKnots + diffGPSTaper*nKnotsGPS)
     parNames[(startI + 1):(startI+nKnots + diffGPSTaper*nKnotsGPS)] = paste0("beta^t_", 1:nKnots)
+    parNamesTMB[(startI + 1):(startI+nKnots + diffGPSTaper*nKnotsGPS)] = "betaTaper"
     
     startI = startI+nKnots + diffGPSTaper*nKnotsGPS + 1
   }
@@ -2857,14 +2861,19 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
     varPar = params[startI:(startI - 1 + nKnotsVar)]
     parscale[startI:(startI - 1 + nKnotsVar)] = 1
     parNames[startI:(startI - 1 + nKnotsVar)] = paste0("beta^s_", 1:nKnotsVar)
+    parNamesTMB[startI] = "betasdIntercept"
+    parNamesTMB[(startI + 1):(startI - 1 + nKnotsVar)] = "betasd"
     startI = nKnotsVar + startI
     endI = startI - 1 + nKnots + diffGPSTaper*nKnotsGPS
     
     taperPar = params[startI:endI]
     parscale[startI:endI] = 1
     parNames[startI:(startI - 1 + nKnots)] = paste0("beta^t_", 1:nKnots)
-    if(diffGPSTaper)
+    parNamesTMB[startI:(startI - 1 + nKnots)] = "betaTaper"
+    if(diffGPSTaper) {
       parNames[(startI + nKnots):endI] = paste0("beta^t'_", 1:nKnotsGPS)
+      parNamesTMB[(startI + nKnots):endI] = "betaTaperGPS"
+    }
     
     startI = endI + 1
   }
@@ -2873,6 +2882,8 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
     gammaPar = params[startI:(startI - 1 + nKnotsGamma)]
     parscale[startI:(startI - 1 + nKnotsGamma)] = 1
     parNames[startI:(startI - 1 + nKnotsGamma)] = paste0("beta^g_", 1:nKnotsGamma)
+    parNamesTMB[startI] = "betaGammaIntercept"
+    parNamesTMB[(startI + 1):(startI - 1 + nKnotsGamma)] = "betaGamma"
     startI = nKnotsGamma + startI
   } else {
     gammaPar = NULL
@@ -2883,6 +2894,10 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
     highInflation = params[startI + 1]
     parNames[startI] = "phi_l"
     parNames[startI + 1] = "phi_h"
+    parNamesTMB[startI] = "loglowInflate"
+    parNamesTMB[startI + 1] = "loghighInflate"
+    parscale[startI] = 1
+    parscale[startI + 1] = 1
     startI = startI + 2
   } else {
     lowInflation = NULL
@@ -2899,6 +2914,7 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
     if(!anisotropic) {
       parscale[length(params)] = 25
       parNames[length(params)] = "phiZeta"
+      parNamesTMB[length(params)] = "logphi"
       phiZeta = params[length(params)]
       
       alpha = 1
@@ -2906,10 +2922,12 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
     else {
       parscale[length(params) - 1] = 25
       parNames[length(params) - 1] = "phiZeta"
+      parNamesTMB[length(params) - 1] = "logphi"
       phiZeta = params[length(params) - 1]
       
       parscale[length(params)] = 2
       parNames[length(params)] = "alpha"
+      parNamesTMB[length(params)] = "logalpha"
       alpha = params[length(params)]
     }
   }
@@ -2928,7 +2946,8 @@ getInputPar = function(params, fault=csz, gpsDat=slipDatCSZ, nKnots=5, diffGPSTa
   
   list(muZeta=muZeta, muVecCSZ=muVecCSZ, muVecGPS=muVecGPS, sigmaZeta=sigmaZeta, taperPar=taperPar, 
        taperParGPS=taperParGPS, phiZeta=phiZeta, nuZeta=nuZeta, lambda0=lambda0, alpha=alpha, varPar=varPar, 
-       gammaPar=gammaPar, parscale=parscale, parNames=parNames, lowInflation=lowInflation, highInflation=highInflation)
+       gammaPar=gammaPar, parscale=parscale, parNames=parNames, lowInflation=lowInflation, highInflation=highInflation, 
+       parNamesTMB=parNamesTMB)
 }
 
 

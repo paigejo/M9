@@ -41,6 +41,23 @@ taper = function(d, lambda=1, alpha=2, dStar=21000, normalize=TRUE, approxNear0=
   return(ans)
 }
 
+taper2 = function(d, lambda=1, dStar=21000) {
+  scaledD = abs(d/dStar)^2 * lambda^2
+  
+  # ans = 1 - (1 - exp(-scaledD))/(1 - exp(-lambda^alpha))
+  ans = 1 - exp(log(1 - exp(-scaledD)) - log(1 - exp(-lambda^2)))
+  ans[d > dStar] = 0
+  
+  # ans[abs(scaledD) < 1e-17] = 0 # account for numerical instability near 0 (usually only occurs if something's wrong)
+  # ans[d <= 0] = 1
+  # if(approxNear0 && normalize) {
+  #   smallLam = abs(lambda) < .0000005
+  #   ans[smallLam] = 1 - (d[smallLam]/dStar)^2 # numerical instability so take the limit as lambda to 0
+  # }
+  return(ans)
+}
+
+
 # only for alpha=2.  Returns an n x p matrix of derivatives for n depths and p basis coefficients.
 # Xi is the n x p taper basis matrix
 taperGrad = function(d, Xi, lambda=1, dStar=21000, normalize=TRUE, diffGPSTaper=FALSE, diffXi2=FALSE, Xi2=Xi) {

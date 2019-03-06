@@ -20,10 +20,13 @@ getSplineBasis = function(fault=csz, latRange=c(40,50), nKnots=5,
 
 # gets taper vector for the given fault and spline basis parameters
 getTaperSpline = function(splinePar, fault=csz, latRange=c(40, 50), nKnots=5, 
-                          normalize=TRUE, dStar=21000, lats=fault$latitude) {
+                          normalize=TRUE, dStar=21000, lats=fault$latitude, 
+                          logScale=FALSE) {
   splineMat = getSplineBasis(fault, latRange, nKnots, lats)
   
   lambdas = splineMat %*% splinePar
+  if(logScale)
+    lambdas = exp(lambdas)
   c(taper(getFaultCenters(fault)[,3], lambda=lambdas, dStar=dStar, normalize=normalize))
 }
 

@@ -41,3 +41,5 @@ lonGrid = seq(lonRange[1], lonRange[2], l=nx)
 latGrid = seq(latRange[1], latRange[2], l=ny)
 G = okadaAll(csz, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=0.25)
 # fauxG = getFauxG()
+
+options(error=recover)

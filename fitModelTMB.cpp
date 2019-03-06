@@ -19,6 +19,15 @@ Type taper(Type depth, Type lambda, Type dStar) {
 }
 
 template<class Type>
+// define a smoothness penalty: numerical interval on the spline values
+Type penaltyFun(vector<Type> splineValues, Type delta, Type logLambda) {
+  vector<Type> integrand(splineValues.size() - 1);
+  for(int i=0; i<integrand.size(); i++)
+    integrand(i) = pow((splineValues(i + 1) - splineValues(i)) * (1 / delta), Type(2));
+  return sum(integrand) * delta * exp(logLambda);
+}
+
+template<class Type>
 Type objective_function<Type>::operator() ()
 {
   DATA_VECTOR(x);
@@ -36,19 +45,34 @@ Type objective_function<Type>::operator() ()
   DATA_MATRIX(DSDipGPS);
   DATA_MATRIX(sdBasisX);
   DATA_MATRIX(sdBasisY);
+  DATA_MATRIX(meanBasisY);
+  DATA_MATRIX(meanBasisX);
   DATA_MATRIX(lambdaBasisX);
+  DATA_MATRIX(lambdaBasisXGPS);
   DATA_MATRIX(lambdaBasisY);
   DATA_MATRIX(gammaBasis);
+  
+  DATA_MATRIX(sdBasisPenalty);
+  DATA_MATRIX(taperBasisPenalty);
+  DATA_MATRIX(taperBasisGPSPenalty);
+  DATA_MATRIX(gammaBasisPenalty);
+  DATA_MATRIX(meanBasisPenalty);
   
   DATA_VECTOR(faultDepths);
   DATA_VECTOR(xDepths);
   
   DATA_SCALAR(dStar);
   DATA_SCALAR(dStarGPS);
+  DATA_SCALAR(deltaPenalty);
+  DATA_SCALAR(penaltyMean);
+  DATA_SCALAR(penaltySD);
+  DATA_SCALAR(sharedPenalty);
   
   PARAMETER(logmu);
+  PARAMETER_VECTOR(betaMean);
   PARAMETER(betaTaperIntercept);
   PARAMETER_VECTOR(betaTaper);
+  PARAMETER_VECTOR(betaTaperGPS);
   PARAMETER(betasdIntercept);
   PARAMETER_VECTOR(betasd);
   PARAMETER(betaGammaIntercept);
@@ -57,6 +81,12 @@ Type objective_function<Type>::operator() ()
   PARAMETER(logalpha);
   PARAMETER(loglowInflate);
   PARAMETER(loghighInflate);
+  
+  PARAMETER(betasdPenaltyLogLambda);
+  PARAMETER(betaTaperPenaltyLogLambda);
+  PARAMETER(betaTaperGPSPenaltyLogLambda);
+  PARAMETER(betaGammaPenaltyLogLambda);
+  PARAMETER(betaMeanPenaltyLogLambda);
   
   int nx = x.size();
   int ny = y.size();
@@ -77,10 +107,12 @@ Type objective_function<Type>::operator() ()
   Type highInflate = exp(loghighInflate);
   
   // construct lambda, standard deviation, and gamma vectors for both fault and locking rate data
-  vector<Type> lambdaVecX = lambdaBasisX * betaTaper;
+  vector<Type> lambdaVecX = lambdaBasisX * betaTaper + lambdaBasisXGPS * betaTaperGPS;
   vector<Type> lambdaVecY = lambdaBasisY * betaTaper;
   vector<Type> sdVecX = sdBasisX * betasd;
   vector<Type> sdVecY = sdBasisY * betasd;
+  vector<Type> meanVecX = meanBasisX * betaMean;
+  vector<Type> meanVecY = meanBasisY * betaMean;
   vector<Type> gammaVec = gammaBasis * betaGamma;
   
   // add in intercepts
@@ -92,28 +124,86 @@ Type objective_function<Type>::operator() ()
     sdVecX(i) = sdVecX(i) + betasdIntercept;
   for(int i=0; i<sdVecY.size(); i++)
     sdVecY(i) = sdVecY(i) + betasdIntercept;
+  for(int i=0; i<meanVecX.size(); i++)
+    meanVecX(i) = meanVecX(i) + logmu;
+  for(int i=0; i<meanVecY.size(); i++)
+    meanVecY(i) = meanVecY(i) + logmu;
   for(int i=0; i<gammaVec.size(); i++)
     gammaVec(i) = gammaVec(i) + betaGammaIntercept;
   
-  // reparameterize standard deviation and gamma
+  // reparameterize standard deviation, mean, and gamma (lambda values are reparameterized later)
   for(int i=0; i<sdVecX.size(); i++)
     sdVecX(i) = exp(sdVecX(i));
   for(int i=0; i<sdVecY.size(); i++)
     sdVecY(i) = exp(sdVecY(i));
+  for(int i=0; i<meanVecX.size(); i++)
+    meanVecX(i) = exp(meanVecX(i));
+  for(int i=0; i<meanVecY.size(); i++)
+    meanVecY(i) = exp(meanVecY(i));
   for(int i=0; i<gammaVec.size(); i++)
     gammaVec(i) = exp(gammaVec(i));
   
+  // if the penalty parameters are shared, set them all to the sd penalty
+  if(sharedPenalty == Type(1)) {
+    betaTaperPenaltyLogLambda = betasdPenaltyLogLambda;
+    betaTaperGPSPenaltyLogLambda = betasdPenaltyLogLambda;
+    betaGammaPenaltyLogLambda = betasdPenaltyLogLambda;
+    betaMeanPenaltyLogLambda = betasdPenaltyLogLambda;
+  }
+  
+  // Now do the same for the penalty splines
+  vector<Type> lambdaVecPenalty = taperBasisPenalty * betaTaper + taperBasisGPSPenalty * betaTaperGPS;
+  vector<Type> lambdaVecGPSPenalty = taperBasisPenalty * betaTaper;
+  vector<Type> sdVecPenalty = sdBasisPenalty * betasd;
+  vector<Type> gammaVecPenalty = gammaBasisPenalty * betaGamma;
+  vector<Type> meanVecPenalty = meanBasisPenalty * betaMean;
+  
+  // add in intercepts (since we are exponentiating the parameters, adding a constant 
+  // term will affect the penalty)
+  for(int i=0; i<lambdaVecPenalty.size(); i++)
+    lambdaVecPenalty(i) = lambdaVecPenalty(i) + betaTaperIntercept;
+  for(int i=0; i<lambdaVecGPSPenalty.size(); i++)
+    lambdaVecGPSPenalty(i) = lambdaVecGPSPenalty(i) + betaTaperIntercept;
+  for(int i=0; i<sdVecPenalty.size(); i++)
+    sdVecPenalty(i) = sdVecPenalty(i) + betasdIntercept;
+  for(int i=0; i<gammaVecPenalty.size(); i++)
+    gammaVecPenalty(i) = gammaVecPenalty(i) + betaGammaIntercept;
+  for(int i=0; i<meanVecPenalty.size(); i++)
+    meanVecPenalty(i) = meanVecPenalty(i) + logmu;
+  
+  // reparameterize splines (here we penalize lambda directly, so we reparameterize it here)
+  for(int i=0; i<lambdaVecGPSPenalty.size(); i++)
+    lambdaVecGPSPenalty(i) = exp(lambdaVecGPSPenalty(i));
+  for(int i=0; i<lambdaVecPenalty.size(); i++)
+    lambdaVecPenalty(i) = exp(lambdaVecPenalty(i));
+  for(int i=0; i<sdVecPenalty.size(); i++)
+    sdVecPenalty(i) = exp(sdVecPenalty(i));
+  for(int i=0; i<gammaVecPenalty.size(); i++)
+    gammaVecPenalty(i) = exp(gammaVecPenalty(i));
+  for(int i=0; i<meanVecPenalty.size(); i++)
+    meanVecPenalty(i) = exp(meanVecPenalty(i));
+  
   // now that we are done reparameterizing, print out the parameters
   ADREPORT(mu);
+  ADREPORT(logmu);
+  for(int i=0; i<betaMean.size(); i++)
+    ADREPORT(betaMean(i));
   ADREPORT(betasdIntercept);
   for(int i=0; i<betasd.size(); i++)
     ADREPORT(betasd(i));
   ADREPORT(betaTaperIntercept);
   for(int i=0; i<betaTaper.size(); i++)
     ADREPORT(betaTaper(i));
+  for(int i=0; i<betaTaperGPS.size(); i++)
+    ADREPORT(betaTaperGPS(i));
   ADREPORT(betaGammaIntercept);
   for(int i=0; i<betaGamma.size(); i++)
     ADREPORT(betaGamma(i));
+  ADREPORT(betasdPenaltyLogLambda);
+  ADREPORT(betaTaperPenaltyLogLambda);
+  ADREPORT(betaTaperGPSPenaltyLogLambda);
+  ADREPORT(betaGammaPenaltyLogLambda);
+  ADREPORT(betaMeanPenaltyLogLambda);
   ADREPORT(lowInflate);
   ADREPORT(highInflate);
   ADREPORT(phi);
@@ -122,11 +212,11 @@ Type objective_function<Type>::operator() ()
   // construct taper values
   vector<Type> taperX(nx);
   for(int i=0; i<lambdaVecX.size(); i++)
-    taperX(i) = taper(xDepths(i), lambdaVecX(i), dStarGPS);
+    taperX(i) = taper(xDepths(i), exp(lambdaVecX(i)), dStarGPS);
   
   vector<Type> taperFault(lambdaVecY.size());
   for(int i=0; i<lambdaVecY.size(); i++)
-    taperFault(i) = taper(faultDepths(i), lambdaVecY(i), dStar);
+    taperFault(i) = taper(faultDepths(i), exp(lambdaVecY(i)), dStar);
   
   // calculate mean vectors for the subsidence and locking rate data
   // vector<Type> muY = mu * G * taperFault;
@@ -134,9 +224,9 @@ Type objective_function<Type>::operator() ()
   vector<Type> muY = G * taperFault;
   vector<Type> muX(lambdaVecX.size());
   for(int i=0; i<muY.size(); i++)
-    muY(i) = muY(i) * mu;
+    muY(i) = muY(i) * meanVecY(i);
   for(int i=0; i<muX.size(); i++)
-    muX(i) = gammaVec(i) * mu * taperX(i);
+    muX(i) = gammaVec(i) * meanVecX(i) * taperX(i);
   
   // calculate anisotropic covariance matrices of zeta for the fault and the locking rate data
   Type kappa = Type(3 / 2);
@@ -198,18 +288,22 @@ Type objective_function<Type>::operator() ()
   // NOTE: density::MVNORM_t<Type> function gives the negative log likelihood, not the likelihood itself
   Type nll = density::MVNORM_t<Type>(SigmaY)(y - muY);
   nll  +=  density::MVNORM_t<Type>(SigmaX)(x - muX);
+  
+  // add-on the penalty functions/priors
+  nll  +=  penaltyFun(lambdaVecPenalty, deltaPenalty, betaTaperPenaltyLogLambda);
+  nll  +=  penaltyFun(lambdaVecGPSPenalty, deltaPenalty, betaTaperGPSPenaltyLogLambda);
+  nll  +=  penaltyFun(sdVecPenalty, deltaPenalty, betasdPenaltyLogLambda);
+  nll  +=  penaltyFun(gammaVecPenalty, deltaPenalty, betaGammaPenaltyLogLambda);
+  nll  +=  penaltyFun(meanVecPenalty, deltaPenalty, betaMeanPenaltyLogLambda);
+  
+  // add on the negative log hyperpriors (including jacobian factors)
+  nll  +=  -dnorm(betaTaperPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperPenaltyLogLambda;
+  nll  +=  -dnorm(betaTaperGPSPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperGPSPenaltyLogLambda;
+  nll  +=  -dnorm(betasdPenaltyLogLambda, penaltyMean, penaltySD,true) - betasdPenaltyLogLambda;
+  nll  +=  -dnorm(betaGammaPenaltyLogLambda, penaltyMean, penaltySD,true) - betaGammaPenaltyLogLambda;
+  nll  +=  -dnorm(betaMeanPenaltyLogLambda, penaltyMean, penaltySD,true) - betaMeanPenaltyLogLambda;
   return nll;
 }
-
-
-
-
-
-
-
-
-
-
 
 
 
