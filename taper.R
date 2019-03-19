@@ -36,6 +36,8 @@ taper = function(d, lambda=1, alpha=2, dStar=21000, normalize=TRUE, approxNear0=
   ans[d <= 0] = 1
   if(approxNear0 && normalize) {
     smallLam = abs(lambda) < .0000005
+    if(length(d) < length(lambda) && length(d) == 1)
+      d = rep(d, length(lambda))
     ans[smallLam] = 1 - (d[smallLam]/dStar)^2 # numerical instability so take the limit as lambda to 0
   }
   return(ans)

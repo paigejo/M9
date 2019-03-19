@@ -19,11 +19,20 @@ Type taper(Type depth, Type lambda, Type dStar) {
 }
 
 template<class Type>
-// define a smoothness penalty: numerical interval on the spline values
+// define a smoothness penalty: numerical integral on the spline values
 Type penaltyFun(vector<Type> splineValues, Type delta, Type logLambda) {
   vector<Type> integrand(splineValues.size() - 1);
   for(int i=0; i<integrand.size(); i++)
     integrand(i) = pow((splineValues(i + 1) - splineValues(i)) * (1 / delta), Type(2));
+  return sum(integrand) * delta * exp(logLambda);
+}
+
+template<class Type>
+// define a difference penalty: numerical integral on the splines' differences
+Type penaltyDiffFun(vector<Type> splineDifferences, Type delta, Type logLambda) {
+  vector<Type> integrand(splineDifferences.size());
+  for(int i=0; i<integrand.size(); i++)
+    integrand(i) = pow(splineDifferences(i), Type(2));
   return sum(integrand) * delta * exp(logLambda);
 }
 
@@ -43,10 +52,13 @@ Type objective_function<Type>::operator() ()
   DATA_MATRIX(DSDipCSZ);
   DATA_MATRIX(DSStrikeGPS);
   DATA_MATRIX(DSDipGPS);
+  DATA_MATRIX(DSStrikeCross);
+  DATA_MATRIX(DSDipCross);
   DATA_MATRIX(sdBasisX);
   DATA_MATRIX(sdBasisY);
   DATA_MATRIX(meanBasisY);
   DATA_MATRIX(meanBasisX);
+  DATA_MATRIX(meanBasisXGPS);
   DATA_MATRIX(lambdaBasisX);
   DATA_MATRIX(lambdaBasisXGPS);
   DATA_MATRIX(lambdaBasisY);
@@ -57,6 +69,7 @@ Type objective_function<Type>::operator() ()
   DATA_MATRIX(taperBasisGPSPenalty);
   DATA_MATRIX(gammaBasisPenalty);
   DATA_MATRIX(meanBasisPenalty);
+  DATA_MATRIX(meanBasisGPSPenalty);
   
   DATA_VECTOR(faultDepths);
   DATA_VECTOR(xDepths);
@@ -67,9 +80,18 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(penaltyMean);
   DATA_SCALAR(penaltySD);
   DATA_SCALAR(sharedPenalty);
+  DATA_SCALAR(doTaperDiffPenalty);
+  DATA_SCALAR(diffPenaltyMean);
+  DATA_SCALAR(diffPenaltySD);
+  DATA_SCALAR(diffMean);
+  DATA_SCALAR(useHyperpriors);
+  DATA_SCALAR(sharedSpatialProcess);
+  DATA_SCALAR(jointShared);
   
   PARAMETER(logmu);
   PARAMETER_VECTOR(betaMean);
+  PARAMETER(logMeanGPS);
+  PARAMETER_VECTOR(betaMeanGPS);
   PARAMETER(betaTaperIntercept);
   PARAMETER_VECTOR(betaTaper);
   PARAMETER_VECTOR(betaTaperGPS);
@@ -81,12 +103,16 @@ Type objective_function<Type>::operator() ()
   PARAMETER(logalpha);
   PARAMETER(loglowInflate);
   PARAMETER(loghighInflate);
+  PARAMETER(logitOmega);
   
   PARAMETER(betasdPenaltyLogLambda);
   PARAMETER(betaTaperPenaltyLogLambda);
   PARAMETER(betaTaperGPSPenaltyLogLambda);
   PARAMETER(betaGammaPenaltyLogLambda);
   PARAMETER(betaMeanPenaltyLogLambda);
+  PARAMETER(betaMeanGPSPenaltyLogLambda);
+  PARAMETER(taperDiffPenaltyLogLambda);
+  PARAMETER(meanDiffPenaltyLogLambda);
   
   int nx = x.size();
   int ny = y.size();
@@ -105,6 +131,10 @@ Type objective_function<Type>::operator() ()
   Type alpha = exp(logalpha);
   Type lowInflate = exp(loglowInflate);
   Type highInflate = exp(loghighInflate);
+  Type omega = 0;
+  if(sharedSpatialProcess == Type(1)) {
+    omega = exp(logitOmega)/(Type(1)+exp(logitOmega));
+  }
   
   // construct lambda, standard deviation, and gamma vectors for both fault and locking rate data
   vector<Type> lambdaVecX = lambdaBasisX * betaTaper + lambdaBasisXGPS * betaTaperGPS;
@@ -131,6 +161,13 @@ Type objective_function<Type>::operator() ()
   for(int i=0; i<gammaVec.size(); i++)
     gammaVec(i) = gammaVec(i) + betaGammaIntercept;
   
+  // add in a different mean for the gps data if necessary
+  if(diffMean == Type(1)) {
+    meanVecX = meanVecX + meanBasisXGPS * betaMeanGPS;
+    for(int i=0; i<meanVecX.size(); i++)
+      meanVecX(i) = meanVecX(i) + logMeanGPS;
+  }
+  
   // reparameterize standard deviation, mean, and gamma (lambda values are reparameterized later)
   for(int i=0; i<sdVecX.size(); i++)
     sdVecX(i) = exp(sdVecX(i));
@@ -149,6 +186,7 @@ Type objective_function<Type>::operator() ()
     betaTaperGPSPenaltyLogLambda = betasdPenaltyLogLambda;
     betaGammaPenaltyLogLambda = betasdPenaltyLogLambda;
     betaMeanPenaltyLogLambda = betasdPenaltyLogLambda;
+    betaMeanGPSPenaltyLogLambda = betasdPenaltyLogLambda;
   }
   
   // Now do the same for the penalty splines
@@ -157,6 +195,9 @@ Type objective_function<Type>::operator() ()
   vector<Type> sdVecPenalty = sdBasisPenalty * betasd;
   vector<Type> gammaVecPenalty = gammaBasisPenalty * betaGamma;
   vector<Type> meanVecPenalty = meanBasisPenalty * betaMean;
+  vector<Type> meanVecGPSPenalty(meanVecPenalty);
+  if(diffMean == Type(1))
+    meanVecGPSPenalty = meanBasisPenalty * betaMean;
   
   // add in intercepts (since we are exponentiating the parameters, adding a constant 
   // term will affect the penalty)
@@ -170,6 +211,11 @@ Type objective_function<Type>::operator() ()
     gammaVecPenalty(i) = gammaVecPenalty(i) + betaGammaIntercept;
   for(int i=0; i<meanVecPenalty.size(); i++)
     meanVecPenalty(i) = meanVecPenalty(i) + logmu;
+  if(diffMean == Type(1)) {
+    meanVecGPSPenalty = meanVecGPSPenalty + meanBasisGPSPenalty * betaMeanGPS;
+    for(int i=0; i<meanVecGPSPenalty.size(); i++)
+      meanVecGPSPenalty(i) = meanVecGPSPenalty(i) + logmu + logMeanGPS;
+  }
   
   // reparameterize splines (here we penalize lambda directly, so we reparameterize it here)
   for(int i=0; i<lambdaVecGPSPenalty.size(); i++)
@@ -182,12 +228,19 @@ Type objective_function<Type>::operator() ()
     gammaVecPenalty(i) = exp(gammaVecPenalty(i));
   for(int i=0; i<meanVecPenalty.size(); i++)
     meanVecPenalty(i) = exp(meanVecPenalty(i));
+  if(diffMean == Type(1)) {
+    for(int i=0; i<meanVecGPSPenalty.size(); i++)
+      meanVecGPSPenalty(i) = exp(meanVecGPSPenalty(i));
+  }
   
   // now that we are done reparameterizing, print out the parameters
   ADREPORT(mu);
   ADREPORT(logmu);
   for(int i=0; i<betaMean.size(); i++)
     ADREPORT(betaMean(i));
+  ADREPORT(logMeanGPS);
+  for(int i=0; i<betaMeanGPS.size(); i++)
+    ADREPORT(betaMeanGPS(i));
   ADREPORT(betasdIntercept);
   for(int i=0; i<betasd.size(); i++)
     ADREPORT(betasd(i));
@@ -204,10 +257,15 @@ Type objective_function<Type>::operator() ()
   ADREPORT(betaTaperGPSPenaltyLogLambda);
   ADREPORT(betaGammaPenaltyLogLambda);
   ADREPORT(betaMeanPenaltyLogLambda);
+  ADREPORT(betaMeanGPSPenaltyLogLambda);
+  ADREPORT(taperDiffPenaltyLogLambda);
+  ADREPORT(meanDiffPenaltyLogLambda);
   ADREPORT(lowInflate);
   ADREPORT(highInflate);
   ADREPORT(phi);
   ADREPORT(alpha);
+  ADREPORT(omega);
+  ADREPORT(logitOmega);
   
   // construct taper values
   vector<Type> taperX(nx);
@@ -219,14 +277,43 @@ Type objective_function<Type>::operator() ()
     taperFault(i) = taper(faultDepths(i), exp(lambdaVecY(i)), dStar);
   
   // calculate mean vectors for the subsidence and locking rate data
-  // vector<Type> muY = mu * G * taperFault;
-  // vector<Type> muX = mu * gammaVec * taperX;
-  vector<Type> muY = G * taperFault;
+  vector<Type> meanSlip(taperFault.size());
+  for(int i=0; i<meanSlip.size(); i++)
+    meanSlip(i) = taperFault(i) * meanVecY(i);
+  
   vector<Type> muX(lambdaVecX.size());
-  for(int i=0; i<muY.size(); i++)
-    muY(i) = muY(i) * meanVecY(i);
   for(int i=0; i<muX.size(); i++)
     muX(i) = gammaVec(i) * meanVecX(i) * taperX(i);
+  
+  vector<Type> muY = G * meanSlip;
+  
+  // concatenate mean vectors into a single joint vector if necessary
+  vector<Type> muJoint(nx + ny);
+  if(jointShared == Type(1)) {
+    for(int i=0; i<muJoint.size(); i++) {
+      if(i >= nx) {
+        int iY = i - nx;
+        muJoint(i) = muY(iY);
+      }
+      else {
+        muJoint(i) = muX(i);
+      }
+    }
+  }
+  
+  // do the same for the observations if necessary
+  vector<Type> obs(nx + ny);
+  if(jointShared == Type(1)) {
+    for(int i=0; i<obs.size(); i++) {
+      if(i >= nx) {
+        int iY = i - nx;
+        obs(i) = y(iY);
+      }
+      else {
+        obs(i) = x(i);
+      }
+    }
+  }
   
   // calculate anisotropic covariance matrices of zeta for the fault and the locking rate data
   Type kappa = Type(3 / 2);
@@ -242,6 +329,14 @@ Type objective_function<Type>::operator() ()
   for(int i=0; i<SigmaZetaGPS.rows(); i++)
     for(int j=0; j<SigmaZetaGPS.cols(); j++)
       SigmaZetaGPS(i,j) = sdVecX(i) * sdVecX(j) * matern(sqrt(alphaSq * DSStrikeGPS(i,j) + alphaInvSq * DSDipGPS(i,j)), phi, kappa);
+  
+  matrix<Type> SigmaZetaCross(DSStrikeCross);
+  if(jointShared == Type(1)) {
+    // compute the cross covariances for zeta if necessary (from GPS to CSZ)
+    for(int i=0; i<SigmaZetaCross.rows(); i++)
+      for(int j=0; j<SigmaZetaCross.cols(); j++)
+        SigmaZetaCross(i,j) = sdVecX(i) * sdVecY(j) * matern(sqrt(alphaSq * DSStrikeCross(i,j) + alphaInvSq * DSDipCross(i,j)), phi, kappa);
+  }
   
   // calculate covariance matrix of slips for fault
   matrix<Type> SigmaSlipFault(SigmaZetaCSZ);
@@ -259,7 +354,7 @@ Type objective_function<Type>::operator() ()
       yInflateSD(i) = ysd(i) * highInflate;
   }
   
-  // calculate covariance matrix of locking rate data
+  // calculate covariance matrix of locking rate data (assume same correlation as zeta)
   matrix<Type> SigmaXi(SigmaZetaGPS);
   for(int i=0; i<SigmaXi.rows(); i++)
     for(int j=0; j<SigmaXi.cols(); j++)
@@ -271,8 +366,15 @@ Type objective_function<Type>::operator() ()
     for(int j=0; j<ny; j++) {
       if(i == j)
         SigmaY(i,i) = SigmaY(i,i) + pow(yInflateSD(i), Type(2));
-      else
-        SigmaY(i,j) = SigmaY(i,j) * zeroMask(i,j);
+      else {
+        if(sharedSpatialProcess != Type(1)) {
+          SigmaY(i,j) = SigmaY(i,j) * zeroMask(i,j);
+        }
+        else {
+          // in this case, different earthquakes still share omega of the variance
+          SigmaY(i,j) = SigmaY(i,j) * (omega + (1 - omega) * zeroMask(i,j));
+        }
+      }
     }
   }
   
@@ -284,10 +386,55 @@ Type objective_function<Type>::operator() ()
     }
   }
   
+  // calculate the joint covariance between subsidence and gps data if necessary
+  matrix<Type> SigmaCross(nx, ny);
+  matrix<Type> SigmaJoint(nx + ny, nx + ny);
+  if(jointShared == Type(1)) {
+    // cross covariance from gps to csz
+    for(int i=0; i<nx; i++) {
+      for(int j=0; j<ny; j++) {
+        SigmaCross(i,j) = gammaVec(i) * taperX(i) * omega * SigmaZetaCross(i,j) * taperFault(j);
+      }
+    }
+    SigmaCross = SigmaCross * G.transpose();
+    
+    // joint covariance (gps, csz)
+    for(int i=0; i<nx + ny; i++) {
+      for(int j=0; j<nx + ny; j++) {
+        if(i<nx && j<nx) {
+          // this is the gps portion of the covariance matrix
+          SigmaJoint(i,j) = SigmaX(i,j);
+        }
+        else if(i<nx && j >= nx) {
+          // cross covariance from gps to csz
+          int jY = j - nx;
+          SigmaJoint(i,j) = SigmaCross(i, jY);
+        }
+        else if(i >= nx && j<nx) {
+          // cross covariance from csz to gps
+          int iY = i - nx;
+          SigmaJoint(i,j) = SigmaCross(j, iY);
+        }
+        else {
+          // this is the csz portion of the covariance matrix
+          int iY = i - nx;
+          int jY = j - nx;
+          SigmaJoint(i,j) = SigmaY(iY,jY);
+        }
+      }
+    }
+  }
+  
   // calculate subsidence negative log likelihood
   // NOTE: density::MVNORM_t<Type> function gives the negative log likelihood, not the likelihood itself
-  Type nll = density::MVNORM_t<Type>(SigmaY)(y - muY);
-  nll  +=  density::MVNORM_t<Type>(SigmaX)(x - muX);
+  Type nll = 0;
+  if(jointShared != Type(1)) {
+    nll += density::MVNORM_t<Type>(SigmaY)(y - muY);
+    nll +=  density::MVNORM_t<Type>(SigmaX)(x - muX);
+  }
+  else {
+    nll += density::MVNORM_t<Type>(SigmaJoint)(obs - muJoint);
+  }
   
   // add-on the penalty functions/priors
   nll  +=  penaltyFun(lambdaVecPenalty, deltaPenalty, betaTaperPenaltyLogLambda);
@@ -295,13 +442,39 @@ Type objective_function<Type>::operator() ()
   nll  +=  penaltyFun(sdVecPenalty, deltaPenalty, betasdPenaltyLogLambda);
   nll  +=  penaltyFun(gammaVecPenalty, deltaPenalty, betaGammaPenaltyLogLambda);
   nll  +=  penaltyFun(meanVecPenalty, deltaPenalty, betaMeanPenaltyLogLambda);
+  if(diffMean == Type(1)) {
+    for(int i=0; i<meanVecGPSPenalty.size(); i++)
+      nll  +=  penaltyFun(meanVecGPSPenalty, deltaPenalty, betaMeanGPSPenaltyLogLambda);
+  }
+  if(doTaperDiffPenalty == Type(1)) {
+    vector<Type> lambdaDiffPenalty(lambdaVecPenalty.size());
+    for(int i=0; i<lambdaDiffPenalty.size(); i++)
+      lambdaDiffPenalty(i) = lambdaVecPenalty(i) - lambdaVecGPSPenalty(i);
+    nll  +=  penaltyDiffFun(lambdaDiffPenalty, deltaPenalty, taperDiffPenaltyLogLambda);
+    
+    if(diffMean == Type(1)) {
+      vector<Type> meanDiffPenalty(meanVecPenalty.size());
+      for(int i=0; i<meanDiffPenalty.size(); i++)
+        meanDiffPenalty(i) = meanVecPenalty(i) - meanVecGPSPenalty(i);
+      nll  +=  penaltyDiffFun(meanDiffPenalty, deltaPenalty, meanDiffPenaltyLogLambda);
+    }
+  }
   
   // add on the negative log hyperpriors (including jacobian factors)
-  nll  +=  -dnorm(betaTaperPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperPenaltyLogLambda;
-  nll  +=  -dnorm(betaTaperGPSPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperGPSPenaltyLogLambda;
-  nll  +=  -dnorm(betasdPenaltyLogLambda, penaltyMean, penaltySD,true) - betasdPenaltyLogLambda;
-  nll  +=  -dnorm(betaGammaPenaltyLogLambda, penaltyMean, penaltySD,true) - betaGammaPenaltyLogLambda;
-  nll  +=  -dnorm(betaMeanPenaltyLogLambda, penaltyMean, penaltySD,true) - betaMeanPenaltyLogLambda;
+  if(useHyperpriors == Type(1)) {
+    nll  +=  -dnorm(betaTaperPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperPenaltyLogLambda;
+    nll  +=  -dnorm(betaTaperGPSPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperGPSPenaltyLogLambda;
+    nll  +=  -dnorm(betasdPenaltyLogLambda, penaltyMean, penaltySD,true) - betasdPenaltyLogLambda;
+    nll  +=  -dnorm(betaGammaPenaltyLogLambda, penaltyMean, penaltySD,true) - betaGammaPenaltyLogLambda;
+    nll  +=  -dnorm(betaMeanPenaltyLogLambda, penaltyMean, penaltySD,true) - betaMeanPenaltyLogLambda;
+    if(doTaperDiffPenalty == Type(1)) {
+      nll  +=  -dnorm(taperDiffPenaltyLogLambda, diffPenaltyMean, diffPenaltySD,true) - taperDiffPenaltyLogLambda;
+      
+      if(diffMean == Type(1))
+        nll  +=  -dnorm(meanDiffPenaltyLogLambda, diffPenaltyMean, diffPenaltySD,true) - taperDiffPenaltyLogLambda;
+    }
+  }
+  
   return nll;
 }
 
