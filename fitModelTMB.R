@@ -916,7 +916,9 @@ plotModelInfo = function(modelInfo, latRange=c(40, 50), fault=csz, gpsDat=slipDa
   lines(latSeq, meanSeqGPS * gammaSeq, col="blue")
 }
 
-# test = fitModelTMB(debug=TRUE, doMeanSpline=TRUE)
+fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
+                      G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), 
+                      sharedSpatialProcess=TRUE, jointShared = TRUE, debug=TRUE)
 
 
 logit <- function(x) {

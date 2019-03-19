@@ -56,7 +56,8 @@ minLat = min(c(csz$latitude, threshSlipDat$lat)) - .001
 maxLat = max(c(csz$latitude, threshSlipDat$lat)) + .001
 
 fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
-                      G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), sharedSpatialProcess=TRUE)
+                      G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), 
+                      sharedSpatialProcess=TRUE, jointShared = TRUE)
 # load("fullFit.RData")
 out = load(paste0("~/git/M9/fit_n5_dS25000_diffTRUE_nGPS5_GamTRUE_nGam7_dStarGPS40000_sdTRUE_", 
                   "nVar5_fixInflFALSE_fixedPenTRUE_logPen0_sharePenFALSE_MeanTRUE_nMu5_nMuGPS7_", 
