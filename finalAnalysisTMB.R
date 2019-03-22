@@ -58,7 +58,7 @@ maxLat = max(c(csz$latitude, threshSlipDat$lat)) + .001
 # fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
 #                       G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), 
 #                       sharedSpatialProcess=TRUE, jointShared = TRUE)
-fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
+fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = FALSE, 
                       G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1),
                       sharedSpatialProcess=TRUE, jointShared = TRUE, includeGammaSpline = FALSE, 
                       doMeanSpline=FALSE)

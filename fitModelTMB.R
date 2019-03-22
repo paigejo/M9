@@ -513,6 +513,10 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
     par(mfrow=c(1,1))
     meanBasisX = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsMean, latRange=latRange)
     meanBasisXGPS = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsMeanGPS, latRange=latRange)
+    if(!doMeanSpline) {
+      meanBasisX = matrix(1, nrow=length(threshSlipDat$lat))
+      meanBasisXGPS = matrix(1, nrow=length(threshSlipDat$lat))
+    }
     if(diffMean)
       meanVecX = exp(meanBasisX %*% betaMeanEst + diffMean * (meanBasisXGPS %*% betaMeanGPSEst))
     else
@@ -595,15 +599,15 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
   }
   if(includeTaperDiffPar) {
     taperDiffPenaltyLogLambdaEst = minPar[which(optParNames == "taperDiffPenaltyLogLambdaEst")]
-    meanDiffPenaltyLogLambda = minPar[which(optParNames == "meanDiffPenaltyLogLambda")]
+    meanDiffPenaltyLogLambdaEst = minPar[which(optParNames == "meanDiffPenaltyLogLambda")]
   }
   else if(fixedDiffPenalty) {
     taperDiffPenaltyLogLambdaEst = logDiffPenaltyPar
-    meanDiffPenaltyLogLambda = logDiffPenaltyPar
+    meanDiffPenaltyLogLambdaEst = logDiffPenaltyPar
   }
   else {
     taperDiffPenaltyLogLambdaEst = NULL
-    meanDiffPenaltyLogLambda = NULL
+    meanDiffPenaltyLogLambdaEst = NULL
   }
   if(sharedSpatialProcess) {
     logitOmega = minPar[which(optParNames == "logitOmega")]
@@ -621,10 +625,10 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
                betaTaperGPSPenaltyLogLambdaEst=betaTaperGPSPenaltyLogLambdaEst, 
                betaGammaPenaltyLogLambdaEst=betaGammaPenaltyLogLambdaEst, 
                betaMeanPenaltyLogLambdaEst=betaMeanPenaltyLogLambdaEst, 
-               betaMeanGPSPenaltyLogLambda=betaMeanGPSPenaltyLogLambda, 
+               betaMeanGPSPenaltyLogLambdaEst=betaMeanGPSPenaltyLogLambda, 
                taperDiffPenaltyLogLambdaEst=taperDiffPenaltyLogLambdaEst, 
-               meanDiffPenaltyLogLambda=meanDiffPenaltyLogLambda, omega=omega, 
-               logitOmega=logitOmega)
+               meanDiffPenaltyLogLambdaEst=meanDiffPenaltyLogLambda, omegaEst=omega, 
+               logitOmegaEst=logitOmega)
   
   lambdaBasisY = getSplineBasis(fault, nKnots=nKnots, latRange=latRange)
   lambdaBasisX = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnots, latRange=latRange)
@@ -713,6 +717,10 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
   par(mfrow=c(1,1))
   meanBasisX = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsMean, latRange=latRange)
   meanBasisXGPS = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsMeanGPS, latRange=latRange)
+  if(!doMeanSpline) {
+    meanBasisX = matrix(1, nrow=length(threshSlipDat$lat))
+    meanBasisXGPS = matrix(1, nrow=length(threshSlipDat$lat))
+  }
   if(diffMean)
     meanVecX = exp(meanBasisX %*% betaMeanEst + diffMean * (meanBasisXGPS %*% betaMeanGPSEst))
   else
@@ -740,6 +748,7 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
        betaMeanEst=betaMeanEst, logMeanGPSEst=logMeanGPSEst, betaMeanGPSEst=betaMeanGPSEst, loglowInflateEst=loglowInflateEst, loghighInflateEst=loghighInflateEst, 
        strikeDistGps = sqrt(squareStrikeDistGps), dipDistGps = sqrt(squareDipDistGps),
        strikeDistCsz = sqrt(squareStrikeDistCsz), dipDistCsz = sqrt(squareDipDistCsz), 
+       strikeDistCross = sqrt(squareStrikeDistCross), dipDistCross = sqrt(squareDipDistCross), 
        finalPar=finalPar, betasdPenaltyLogLambdaEst=betasdPenaltyLogLambdaEst, 
        betaTaperPenaltyLogLambdaEst=betaTaperPenaltyLogLambdaEst, 
        betaTaperGPSPenaltyLogLambdaEst=betaTaperGPSPenaltyLogLambdaEst, 
@@ -905,6 +914,10 @@ plotModelInfo = function(modelInfo, latRange=c(40, 50), fault=csz, gpsDat=slipDa
   par(mfrow=c(1,1))
   meanBasisX = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsMean, latRange=latRange)
   meanBasisXGPS = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsMeanGPS, latRange=latRange)
+  if(!doMeanSpline) {
+    meanBasisX = matrix(1, nrow=length(threshSlipDat$lat))
+    meanBasisXGPS = matrix(1, nrow=length(threshSlipDat$lat))
+  }
   meanVecX = exp(meanBasisX %*% betaMeanEst + diffMean * (meanBasisXGPS %*% betaMeanGPSEst))
   sortI = sort(threshSlipDat$lat, index.return=TRUE)$ix
   plot(threshSlipDat$lat, 1000 * meanVecX * taperVecX / threshSlipDat$slip, pch=19, cex=.1,

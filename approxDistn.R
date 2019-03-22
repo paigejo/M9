@@ -27,7 +27,7 @@ genLogMuSigma = function(mu, Sigma) {
 # independent.  subDat is the subsidence dataset used to generate G
 estSubsidenceMeanCov = function(muZeta, lambda, SigmaZeta, G, tvec=NULL, 
                                 setEventsIndep=TRUE, fault=csz, subDat=dr1, normalModel=FALSE, 
-                                dStar=28000, normalizeTaper=TRUE) {
+                                dStar=28000, normalizeTaper=TRUE, omega=0) {
   
   # get vector of taper values
   if(is.null(tvec))
@@ -62,7 +62,7 @@ estSubsidenceMeanCov = function(muZeta, lambda, SigmaZeta, G, tvec=NULL,
   ##### set covariance of observations from different events to 0
   if(setEventsIndep) {
     eventEq = eventsEqMask(subDat)
-    Sigma = Sigma * eventEq # set inter-event covariance to 0 here
+    Sigma = Sigma * (omega + (1 - omega)*eventEq) # set inter-event covariance to omega times the typical covariance here
   }
   
   return(list(mu=mu, Sigma=Sigma))

@@ -12,9 +12,9 @@
 #      these points will be transformed using the projection used for the analysis
 # event: the earthquake for which we want predictions
 predsGivenSubsidenceTMB = function(modelInfo, fault=csz, subDat=dr1, niter=500, gpsDat, 
-                                G=NULL, posNormalModel=FALSE, 
-                                pts=cbind(gpsDat$lon, gpsDat$lat), fastPNSim=TRUE, 
-                                event="T1", xDepths=gpsDat$Depth) {
+                                   G=NULL, posNormalModel=FALSE, 
+                                   pts=cbind(gpsDat$lon, gpsDat$lat), fastPNSim=TRUE, 
+                                   event="T1", xDepths=gpsDat$Depth) {
   
   finalPar = modelInfo$finalPar
   
@@ -47,6 +47,8 @@ predsGivenSubsidenceTMB = function(modelInfo, fault=csz, subDat=dr1, niter=500, 
   
   diffGPSTaper = length(modelInfo$betaTaperGPSEst) != 0
   diffMean = length(betaGammaGPSEst) != 0
+  doMeanSpline = modelInfo$allInputs$doMeanSpline
+  includeGammaSpline = modelInfo$allInputs$includeGammaSpline
   
   faultDepths = getFaultCenters(fault)[,3]
   xDepths = gpsDat$Depth
@@ -55,13 +57,26 @@ predsGivenSubsidenceTMB = function(modelInfo, fault=csz, subDat=dr1, niter=500, 
   lambdaBasisY = getSplineBasis(fault, nKnots=nKnots, latRange=latRange)
   lambdaBasisX = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnots, latRange=latRange)
   lambdaBasisXGPS = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsGPS, latRange=latRange)
-  meanBasisY = getSplineBasis(fault, nKnots=nKnotsMean, latRange=latRange)
-  meanBasisX = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsMean, latRange=latRange)
-  if(diffMean)
-    meanBasisXGPS = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsMeanGPS, latRange=latRange)
+  if(doMeanSpline) {
+    meanBasisY = getSplineBasis(fault, nKnots=nKnotsMean, latRange=latRange)
+    meanBasisX = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsMean, latRange=latRange)
+    if(diffMean)
+      meanBasisXGPS = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsMeanGPS, latRange=latRange)
+  }
+  else {
+    meanBasisY = matrix(1, nrow=length(faultDepths), ncol=1)
+    meanBasisX = matrix(1, nrow=length(xDepths), ncol=1)
+    if(diffMean)
+      meanBasisXGPS = matrix(1, nrow=length(xDepths), ncol=1)
+  }
   sdBasisY = getSplineBasis(fault, nKnots=nKnotsVar, latRange=latRange)
   sdBasisX = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsVar, latRange=latRange)
-  gammaBasis = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsGamma, latRange=latRange)
+  if(includeGammaSpline) {
+    gammaBasis = getSplineBasis(data.frame(list(latitude=pts[,2])), nKnots=nKnotsGamma, latRange=latRange)
+  }
+  else {
+    gammaBasis = matrix(1, nrow=length(xDepths), ncol=1)
+  }
   
   # evaluate splines on the fault and for the points of interest
   if(!diffGPSTaper)
