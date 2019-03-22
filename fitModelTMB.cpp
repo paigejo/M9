@@ -116,6 +116,7 @@ Type objective_function<Type>::operator() ()
   
   int nx = x.size();
   int ny = y.size();
+  int nFault = G.cols();
   
   // Outline: 
   // reparameterize
@@ -387,16 +388,17 @@ Type objective_function<Type>::operator() ()
   }
   
   // calculate the joint covariance between subsidence and gps data if necessary
-  matrix<Type> SigmaCross(nx, ny);
+  matrix<Type> SigmaXY(nx, ny);
+  matrix<Type> SigmaXFault(nx, nFault);
   matrix<Type> SigmaJoint(nx + ny, nx + ny);
   if(jointShared == Type(1)) {
     // cross covariance from gps to csz
     for(int i=0; i<nx; i++) {
-      for(int j=0; j<ny; j++) {
-        SigmaCross(i,j) = gammaVec(i) * taperX(i) * omega * SigmaZetaCross(i,j) * taperFault(j);
+      for(int j=0; j<nFault; j++) {
+        SigmaXFault(i,j) = gammaVec(i) * taperX(i) * omega * SigmaZetaCross(i,j) * taperFault(j);
       }
     }
-    SigmaCross = SigmaCross * G.transpose();
+    SigmaXY = SigmaXFault * G.transpose();
     
     // joint covariance (gps, csz)
     for(int i=0; i<nx + ny; i++) {
@@ -408,12 +410,12 @@ Type objective_function<Type>::operator() ()
         else if(i<nx && j >= nx) {
           // cross covariance from gps to csz
           int jY = j - nx;
-          SigmaJoint(i,j) = SigmaCross(i, jY);
+          SigmaJoint(i,j) = SigmaXY(i, jY);
         }
         else if(i >= nx && j<nx) {
           // cross covariance from csz to gps
           int iY = i - nx;
-          SigmaJoint(i,j) = SigmaCross(j, iY);
+          SigmaJoint(i,j) = SigmaXY(j, iY);
         }
         else {
           // this is the csz portion of the covariance matrix

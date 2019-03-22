@@ -500,6 +500,8 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
     if(!doMeanSpline)
       meanMat = matrix(1, nrow=length(latSeq))
     meanSeq = exp(meanMat %*% betaMeanEst)
+    if(!doMeanSpline)
+      meanMat = matrix(1, nrow=length(latSeq))
     if(diffMean)
       meanSeqGPS = exp(meanMat %*% betaMeanEst + diffMean * (meanMatGPS %*% betaMeanGPSEst))
     else
@@ -916,9 +918,9 @@ plotModelInfo = function(modelInfo, latRange=c(40, 50), fault=csz, gpsDat=slipDa
   lines(latSeq, meanSeqGPS * gammaSeq, col="blue")
 }
 
-fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
-                      G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), 
-                      sharedSpatialProcess=TRUE, jointShared = TRUE, debug=TRUE)
+# fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
+#                       G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), 
+#                       sharedSpatialProcess=TRUE, jointShared = TRUE, debug=TRUE)
 
 
 logit <- function(x) {
