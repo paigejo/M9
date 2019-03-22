@@ -191,7 +191,7 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
                diffPenaltyMean=diffPenaltyMean, diffPenaltySD=diffPenaltySD, diffMean=as.numeric(diffMean), 
                useHyperpriors=as.numeric(useHyperpriors), sharedSpatialProcess=as.numeric(sharedSpatialProcess), 
                jointShared=as.numeric(jointShared), DSStrikeCross=squareStrikeDistCross, 
-               DSDipCross=squareDipDistCross)
+               DSDipCross=squareDipDistCross, diffGPSTaper=as.numeric(diffGPSTaper))
   parameters = list(logmu=logmu, betasdIntercept=betasdIntercept, betasd=betasd, betaMean=betaMean, logMeanGPS=logMeanGPS, betaMeanGPS=betaMeanGPS, 
                     betaTaperIntercept=betaTaperIntercept, betaTaper=betaTaper, betaTaperGPS=betaTaperGPS, 
                     betaGammaIntercept=betaGammaIntercept, betaGamma=betaGamma, 
@@ -446,8 +446,14 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
     else
       taperVecX = taper(xDepths, exp(lambdaBasisX %*% betaTaperEst + lambdaBasisXGPS %*% betaTaperGPSEst), dStar = dStarGPS)
     taperVecY = taper(faultDepths, exp(lambdaBasisY %*% betaTaperEst), dStar = dStar)
-    sdVecX = exp(sdBasisX %*% betasdEst)
-    sdVecY = exp(sdBasisY %*% betasdEst)
+    if(doVarSpline) {
+      sdVecX = exp(sdBasisX %*% betasdEst)
+      sdVecY = exp(sdBasisY %*% betasdEst)
+    }
+    else {
+      sdVecX = rep(exp(betasdEst), length(xDepths))
+      sdVecY = rep(exp(betasdEst), length(faultDepths))
+    }
     if(diffMean)
       meanVecX = exp(meanBasisX %*% betaMeanEst + diffMean * (meanBasisXGPS %*% betaMeanGPSEst))
     else
@@ -484,7 +490,12 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
     lines(latSeq, taperSeqGPS, col="blue")
     legend("bottomright", c("Fault taper", "Locking rate taper"), col=c("black", "blue"), lty=1)
     sdMat = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsVar, lats=latSeq, latRange=latRange)
-    sdSeq = exp(sdMat %*% betasdEst)
+    if(doVarSpline) {
+      sdSeq = exp(sdMat %*% betasdEst)
+    }
+    else {
+      sdSeq = rep(exp(betasdEst), length(latSeq))
+    }
     plot(latSeq, sdSeq, type="l", ylim=range(c(0, sdSeq)))
     sdSharedSeq = sdSeq * sqrt(omega)
     lines(latSeq, sdSharedSeq, lty=2)
@@ -497,11 +508,11 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
     gammaSeq = exp(gammaMat %*% betaGammaEst)
     meanMat = getSplineBasis(fault=fault, nKnots=nKnotsMean, lats=latSeq, latRange=latRange)
     meanMatGPS = getSplineBasis(fault=fault, nKnots=nKnotsMeanGPS, lats=latSeq, latRange=latRange)
-    if(!doMeanSpline)
+    if(!doMeanSpline) {
       meanMat = matrix(1, nrow=length(latSeq))
+      meanMatGPS = matrix(1, nrow=length(latSeq))
+    }
     meanSeq = exp(meanMat %*% betaMeanEst)
-    if(!doMeanSpline)
-      meanMat = matrix(1, nrow=length(latSeq))
     if(diffMean)
       meanSeqGPS = exp(meanMat %*% betaMeanEst + diffMean * (meanMatGPS %*% betaMeanGPSEst))
     else
@@ -652,8 +663,14 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
   else
     taperVecX = taper(xDepths, exp(lambdaBasisX %*% betaTaperEst + lambdaBasisXGPS %*% betaTaperGPSEst), dStar = dStarGPS)
   taperVecY = taper(faultDepths, exp(lambdaBasisY %*% betaTaperEst), dStar = dStar)
-  sdVecX = exp(sdBasisX %*% betasdEst)
-  sdVecY = exp(sdBasisY %*% betasdEst)
+  if(doVarSpline) {
+    sdVecX = exp(sdBasisX %*% betasdEst)
+    sdVecY = exp(sdBasisY %*% betasdEst)
+  }
+  else {
+    sdVecX = rep(exp(betasdEst), length(xDepths))
+    sdVecY = rep(exp(betasdEst), length(faultDepths))
+  }
   if(diffMean)
     meanVecX = exp(meanBasisX %*% betaMeanEst + meanBasisXGPS %*% betaMeanGPSEst)
   else
@@ -690,7 +707,12 @@ fitModelTMB = function(initParams=NULL, gpsDat=slipDatCSZ, gpsDepthThreshold=210
   lines(latSeq, taperSeqGPS, col="blue")
   legend("bottomright", c("Fault taper", "Locking rate taper"), col=c("black", "blue"), lty=1)
   sdMat = getSplineBasis(data.frame(list(latitude=threshSlipDat$lat)), nKnots=nKnotsVar, lats=latSeq, latRange=latRange)
-  sdSeq = exp(sdMat %*% betasdEst)
+  if(doVarSpline) {
+    sdSeq = exp(sdMat %*% betasdEst)
+  }
+  else {
+    sdSeq = rep(exp(betasdEst), length(latSeq))
+  }
   plot(latSeq, sdSeq, type="l", ylim=range(c(0, sdSeq)))
   sdSharedSeq = sdSeq * sqrt(omega)
   lines(latSeq, sdSharedSeq, lty=2)

@@ -87,6 +87,7 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(useHyperpriors);
   DATA_SCALAR(sharedSpatialProcess);
   DATA_SCALAR(jointShared);
+  DATA_SCALAR(diffGPSTaper);
   
   PARAMETER(logmu);
   PARAMETER_VECTOR(betaMean);
@@ -138,7 +139,10 @@ Type objective_function<Type>::operator() ()
   }
   
   // construct lambda, standard deviation, and gamma vectors for both fault and locking rate data
-  vector<Type> lambdaVecX = lambdaBasisX * betaTaper + lambdaBasisXGPS * betaTaperGPS;
+  vector<Type> lambdaVecX = lambdaBasisX * betaTaper;
+  if(diffGPSTaper == Type(1)) {
+    lambdaVecX = lambdaVecX + lambdaBasisXGPS * betaTaperGPS;
+  }
   vector<Type> lambdaVecY = lambdaBasisY * betaTaper;
   vector<Type> sdVecX = sdBasisX * betasd;
   vector<Type> sdVecY = sdBasisY * betasd;
