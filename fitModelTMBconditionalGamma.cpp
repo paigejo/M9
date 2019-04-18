@@ -7,14 +7,6 @@ Type taper(Type depth, Type lambda, Type dStar) {
   // if(sqrt(pow(lambda, Type(2))) < Type(0.0000005)) {
   //   // this is a limit as lambda approaches 0. Coding this explicitly avoids numerical instability
   //   return Type(1) - pow(depth/dStar, Type(2));
-  // } else if(depth > dStar) {
-  //   return Type(0);
-  // } else if(depth <= Type(0)) {
-  //   return Type(1);
-  // } else {
-  //   Type scaledDepth = pow(sqrt(pow(depth/dStar, Type(2))), Type(2)) * pow(lambda, Type(2));
-  //   Type ans = Type(1) - (Type(1) - exp(-scaledDepth))/(Type(1) - exp(-pow(lambda, Type(2))));
-  //   return ans;
   // }
   if(depth > dStar) {
     return Type(0);
@@ -102,6 +94,8 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(estimateGpsShared);
   DATA_SCALAR(diffGPSTaper);
   DATA_SCALAR(doSmoothnessPenalty);
+  DATA_SCALAR(varSmoothnessPenalty);
+  DATA_SCALAR(reparameterizeVar);
   
   PARAMETER(logmu);
   PARAMETER_VECTOR(betaMean);
@@ -114,8 +108,8 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(betasd);
   PARAMETER(betasdInterceptGPS);
   PARAMETER_VECTOR(betasdGPS);
-  PARAMETER(betaGammaIntercept);
-  PARAMETER_VECTOR(betaGamma);
+  // PARAMETER(betaGammaIntercept);
+  // PARAMETER_VECTOR(betaGamma);
   PARAMETER(logphi);
   PARAMETER(logalpha);
   PARAMETER(loglowInflate);
@@ -128,7 +122,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER(betasdGPSPenaltyLogLambda);
   PARAMETER(betaTaperPenaltyLogLambda);
   PARAMETER(betaTaperGPSPenaltyLogLambda);
-  PARAMETER(betaGammaPenaltyLogLambda);
+  // PARAMETER(betaGammaPenaltyLogLambda);
   PARAMETER(betaMeanPenaltyLogLambda);
   PARAMETER(betaMeanGPSPenaltyLogLambda);
   PARAMETER(taperDiffPenaltyLogLambda);
@@ -170,27 +164,35 @@ Type objective_function<Type>::operator() ()
     lambdaVecX = lambdaVecX + lambdaBasisXGPS * betaTaperGPS;
   }
   vector<Type> lambdaVecY = lambdaBasisY * betaTaper;
-  vector<Type> sdVecX = sdBasisX * betasd;
+  vector<Type> sdVecX(sdBasisX.rows());
+  if(reparameterizeVar != Type(1))
+    sdVecX = sdBasisX * betasd;
+  else {
+    for(int i=0; i<sdVecX.size(); i++)
+      sdVecX(i) = 0;
+  }
   vector<Type> sdVecY = sdBasisY * betasd;
   vector<Type> meanVecX = meanBasisX * betaMean;
   vector<Type> meanVecY = meanBasisY * betaMean;
-  vector<Type> gammaVec = gammaBasis * betaGamma;
+  // vector<Type> gammaVec = gammaBasis * betaGamma;
   
   // add in intercepts
   for(int i=0; i<lambdaVecX.size(); i++)
     lambdaVecX(i) = lambdaVecX(i) + betaTaperIntercept;
   for(int i=0; i<lambdaVecY.size(); i++)
     lambdaVecY(i) = lambdaVecY(i) + betaTaperIntercept;
-  for(int i=0; i<sdVecX.size(); i++)
-    sdVecX(i) = sdVecX(i) + betasdIntercept;
+  if(reparameterizeVar != Type(1)) {
+    for(int i=0; i<sdVecX.size(); i++)
+      sdVecX(i) = sdVecX(i) + betasdIntercept;
+  }
   for(int i=0; i<sdVecY.size(); i++)
     sdVecY(i) = sdVecY(i) + betasdIntercept;
   for(int i=0; i<meanVecX.size(); i++)
     meanVecX(i) = meanVecX(i) + logmu;
   for(int i=0; i<meanVecY.size(); i++)
     meanVecY(i) = meanVecY(i) + logmu;
-  for(int i=0; i<gammaVec.size(); i++)
-    gammaVec(i) = gammaVec(i) + betaGammaIntercept;
+  // for(int i=0; i<gammaVec.size(); i++)
+  //   gammaVec(i) = gammaVec(i) + betaGammaIntercept;
   
   // add in a different mean and sd for the gps data if necessary
   if(diffMean == Type(1)) {
@@ -204,6 +206,30 @@ Type objective_function<Type>::operator() ()
     for(int i=0; i<meanVecX.size(); i++)
       sdVecX(i) = sdVecX(i) + betasdInterceptGPS;
   }
+  
+  // construct taper values
+  vector<Type> taperX(nx);
+  for(int i=0; i<lambdaVecX.size(); i++)
+    taperX(i) = taper(xDepths(i), exp(lambdaVecX(i)), dStarGPS);
+  
+  vector<Type> taperFault(lambdaVecY.size());
+  for(int i=0; i<lambdaVecY.size(); i++)
+    taperFault(i) = taper(faultDepths(i), exp(lambdaVecY(i)), dStar);
+  
+  // take a conditional WLS estimate of gamma here:
+  vector<Type> newXsd = xsd/x;
+  vector<Type> logX(nx);
+  vector<Type> offset(nx);
+  matrix<Type> weightMatrix(nx, nx);
+  for(int i=0; i < nx; i++) {
+    offset(i) = meanVecX(i) + log(taperX(i));
+    logX(i) = log(x(i)) - offset(i);
+    weightMatrix(i,i) = pow(x(i), Type(2)) / pow(newXsd(i), Type(2));
+  }
+  matrix<Type> temp = gammaBasis.transpose() * weightMatrix * gammaBasis;
+  matrix<Type> hatMatrix = temp.inverse() * gammaBasis.transpose() * weightMatrix;
+  vector<Type> betaGamma = hatMatrix * logX;
+  vector<Type> gammaVec = gammaBasis * betaGamma;
   
   // reparameterize standard deviation, mean, and gamma (lambda values are reparameterized later)
   for(int i=0; i<sdVecX.size(); i++)
@@ -221,7 +247,7 @@ Type objective_function<Type>::operator() ()
   if(sharedPenalty == Type(1)) {
     betaTaperPenaltyLogLambda = betasdPenaltyLogLambda;
     betaTaperGPSPenaltyLogLambda = betasdPenaltyLogLambda;
-    betaGammaPenaltyLogLambda = betasdPenaltyLogLambda;
+    // betaGammaPenaltyLogLambda = betasdPenaltyLogLambda;
     betaMeanPenaltyLogLambda = betasdPenaltyLogLambda;
     betaMeanGPSPenaltyLogLambda = betasdPenaltyLogLambda;
     betasdGPSPenaltyLogLambda = betasdPenaltyLogLambda;
@@ -232,14 +258,14 @@ Type objective_function<Type>::operator() ()
   vector<Type> lambdaVecGPSPenalty(nPen);
   vector<Type> sdVecPenalty(nPen);
   vector<Type> sdVecGPSPenalty(nPen);
-  vector<Type> gammaVecPenalty(nPen);
+  // vector<Type> gammaVecPenalty(nPen);
   vector<Type> meanVecPenalty(nPen);
   vector<Type> meanVecGPSPenalty(nPen);
   if(doSmoothnessPenalty == Type(1) || doDiffPenalty == Type(1)) {
     lambdaVecPenalty = taperBasisPenalty * betaTaper;
     lambdaVecGPSPenalty = taperBasisPenalty * betaTaper + taperBasisGPSPenalty * betaTaperGPS;
     sdVecPenalty = sdBasisPenalty * betasd;
-    gammaVecPenalty = gammaBasisPenalty * betaGamma;
+    // gammaVecPenalty = gammaBasisPenalty * betaGamma;
     meanVecPenalty = meanBasisPenalty * betaMean;
     if(diffMean == Type(1))
       meanVecGPSPenalty = meanBasisPenalty * betaMean;
@@ -254,8 +280,8 @@ Type objective_function<Type>::operator() ()
       lambdaVecGPSPenalty(i) = lambdaVecGPSPenalty(i) + betaTaperIntercept;
     for(int i=0; i<sdVecPenalty.size(); i++)
       sdVecPenalty(i) = sdVecPenalty(i) + betasdIntercept;
-    for(int i=0; i<gammaVecPenalty.size(); i++)
-      gammaVecPenalty(i) = gammaVecPenalty(i) + betaGammaIntercept;
+    // for(int i=0; i<gammaVecPenalty.size(); i++)
+    //   gammaVecPenalty(i) = gammaVecPenalty(i) + betaGammaIntercept;
     for(int i=0; i<meanVecPenalty.size(); i++)
       meanVecPenalty(i) = meanVecPenalty(i) + logmu;
     if(diffMean == Type(1)) {
@@ -276,8 +302,8 @@ Type objective_function<Type>::operator() ()
       lambdaVecPenalty(i) = exp(lambdaVecPenalty(i));
     for(int i=0; i<sdVecPenalty.size(); i++)
       sdVecPenalty(i) = exp(sdVecPenalty(i));
-    for(int i=0; i<gammaVecPenalty.size(); i++)
-      gammaVecPenalty(i) = exp(gammaVecPenalty(i));
+    // for(int i=0; i<gammaVecPenalty.size(); i++)
+    //   gammaVecPenalty(i) = exp(gammaVecPenalty(i));
     for(int i=0; i<meanVecPenalty.size(); i++)
       meanVecPenalty(i) = exp(meanVecPenalty(i));
     if(diffMean == Type(1)) {
@@ -309,7 +335,7 @@ Type objective_function<Type>::operator() ()
     ADREPORT(betaTaper(i));
   for(int i=0; i<betaTaperGPS.size(); i++)
     ADREPORT(betaTaperGPS(i));
-  ADREPORT(betaGammaIntercept);
+  // ADREPORT(betaGammaIntercept);
   for(int i=0; i<betaGamma.size(); i++)
     ADREPORT(betaGamma(i));
   if(doSmoothnessPenalty == Type(1)) {
@@ -317,7 +343,7 @@ Type objective_function<Type>::operator() ()
     ADREPORT(betasdGPSPenaltyLogLambda);
     ADREPORT(betaTaperPenaltyLogLambda);
     ADREPORT(betaTaperGPSPenaltyLogLambda);
-    ADREPORT(betaGammaPenaltyLogLambda);
+    // ADREPORT(betaGammaPenaltyLogLambda);
     ADREPORT(betaMeanPenaltyLogLambda);
     ADREPORT(betaMeanGPSPenaltyLogLambda);
   }
@@ -337,15 +363,6 @@ Type objective_function<Type>::operator() ()
   ADREPORT(logLockInflate);
   ADREPORT(lockInflate);
   
-  // construct taper values
-  vector<Type> taperX(nx);
-  for(int i=0; i<lambdaVecX.size(); i++)
-    taperX(i) = taper(xDepths(i), exp(lambdaVecX(i)), dStarGPS);
-  
-  vector<Type> taperFault(lambdaVecY.size());
-  for(int i=0; i<lambdaVecY.size(); i++)
-    taperFault(i) = taper(faultDepths(i), exp(lambdaVecY(i)), dStar);
-  
   // calculate mean vectors for the subsidence and locking rate data
   vector<Type> meanSlip(taperFault.size());
   for(int i=0; i<meanSlip.size(); i++)
@@ -354,6 +371,10 @@ Type objective_function<Type>::operator() ()
   vector<Type> muX(lambdaVecX.size());
   for(int i=0; i<muX.size(); i++)
     muX(i) = gammaVec(i) * meanVecX(i) * taperX(i);
+  // REPORT(muX);
+  // REPORT(gammaVec);
+  // REPORT(meanVecX);
+  // REPORT(taperX);
   
   vector<Type> muY = G * meanSlip;
   
@@ -428,7 +449,7 @@ Type objective_function<Type>::operator() ()
   matrix<Type> SigmaXi(SigmaZetaGPS);
   for(int i=0; i<SigmaXi.rows(); i++)
     for(int j=0; j<SigmaXi.cols(); j++)
-      SigmaXi(i,j) = lockInflate * xsd(i) * xsd(j) * (Type(1) / sdVecX(i)) * (Type(1) / sdVecX(j)) * SigmaZetaGPS(i,j);
+      SigmaXi(i,j) = pow(lockInflate, 2) * xsd(i) * xsd(j) * (Type(1) / sdVecX(i)) * (Type(1) / sdVecX(j)) * SigmaZetaGPS(i,j);
   
   // calculate subsidence covariance
   matrix<Type> SigmaY = G * SigmaSlipFault * G.transpose();
@@ -465,7 +486,7 @@ Type objective_function<Type>::operator() ()
     for(int i=0; i<nx; i++) {
       for(int j=0; j<nFault; j++) {
         if(estimateGpsShared == Type(1)) {
-          SigmaXFault(i,j) = gammaVec(i) * taperX(i) * omega2 * SigmaZetaCross(i,j) * taperFault(j);
+          SigmaXFault(i,j) = gammaVec(i) * taperX(i) * sqrt(omega*omega2) * SigmaZetaCross(i,j) * taperFault(j);
         }
         else {
           SigmaXFault(i,j) = gammaVec(i) * taperX(i) * omega * SigmaZetaCross(i,j) * taperFault(j);
@@ -507,9 +528,11 @@ Type objective_function<Type>::operator() ()
   vector<Type> sdy(ny);
   vector<Type> sdx(nx);
   for(int i=0; i<ny; i++)
-    sdy(i) = SigmaY(i,i);
+    sdy(i) = sqrt(SigmaY(i,i));
   for(int i=0; i<nx; i++)
-    sdx(i) = SigmaX(i,i);
+    sdx(i) = sqrt(SigmaX(i,i));
+  // REPORT(sdx);
+  // REPORT(sdy);
   
   // calculate subsidence negative log likelihood
   // NOTE: density::MVNORM_t<Type> function gives the negative log likelihood, not the likelihood itself
@@ -528,6 +551,8 @@ Type objective_function<Type>::operator() ()
   }
   else {
     nll += density::MVNORM_t<Type>(SigmaJoint)(obs - muJoint);
+    // REPORT(obs);
+    // REPORT(muJoint);
     
     // calculate residuals
     for(int i=0; i<ny; i++) {
@@ -544,23 +569,41 @@ Type objective_function<Type>::operator() ()
   REPORT(yResiduals);
   
   // add-on the penalty functions/priors
+  Type lambdaPenaltyTerm = Type(0);
+  Type lambdaGPSPenaltyTerm = Type(0);
+  Type sdPenaltyTerm = Type(0);
+  Type sdGPSPenaltyTerm = Type(0);
+  Type meanPenaltyTerm = Type(0);
+  Type meanGPSPenaltyTerm = Type(0);
   if(doSmoothnessPenalty == Type(1)) {
     // add in smoothness penalties
     
-    nll  +=  penaltyFun(lambdaVecPenalty, deltaPenalty, betaTaperPenaltyLogLambda);
-    nll  +=  penaltyFun(lambdaVecGPSPenalty, deltaPenalty, betaTaperGPSPenaltyLogLambda);
-    nll  +=  penaltyFun(sdVecPenalty, deltaPenalty, betasdPenaltyLogLambda);
-    nll  +=  penaltyFun(gammaVecPenalty, deltaPenalty, betaGammaPenaltyLogLambda);
-    nll  +=  penaltyFun(meanVecPenalty, deltaPenalty, betaMeanPenaltyLogLambda);
+    lambdaPenaltyTerm =  penaltyFun(lambdaVecPenalty, deltaPenalty, betaTaperPenaltyLogLambda);
+    lambdaGPSPenaltyTerm =  penaltyFun(lambdaVecGPSPenalty, deltaPenalty, betaTaperGPSPenaltyLogLambda);
+    if(varSmoothnessPenalty == Type(1)) {
+      sdPenaltyTerm =  penaltyFun(sdVecPenalty, deltaPenalty, betasdPenaltyLogLambda);
+    }
+    // penaltyTerm  +=  penaltyFun(gammaVecPenalty, deltaPenalty, betaGammaPenaltyLogLambda);
+    meanPenaltyTerm =  penaltyFun(meanVecPenalty, deltaPenalty, betaMeanPenaltyLogLambda);
     if(diffMean == Type(1)) {
       for(int i=0; i<meanVecGPSPenalty.size(); i++)
-        nll  +=  penaltyFun(meanVecGPSPenalty, deltaPenalty, betaMeanGPSPenaltyLogLambda);
+        meanGPSPenaltyTerm = penaltyFun(meanVecGPSPenalty, deltaPenalty, betaMeanGPSPenaltyLogLambda);
     }
-    if(diffVar == Type(1)) {
-      for(int i=0; i<sdVecGPSPenalty.size(); i++)
-        nll  +=  penaltyFun(sdVecGPSPenalty, deltaPenalty, betasdGPSPenaltyLogLambda);
+    if(diffVar == Type(1) && varSmoothnessPenalty == Type(1)) {
+      for(int i=0; i<sdVecGPSPenalty.size(); i++) {
+        sdGPSPenaltyTerm = penaltyFun(sdVecGPSPenalty, deltaPenalty, betasdGPSPenaltyLogLambda);
+      }
     }
   }
+  Type penaltyTerm = lambdaPenaltyTerm + lambdaGPSPenaltyTerm + sdPenaltyTerm + sdGPSPenaltyTerm + meanPenaltyTerm + meanGPSPenaltyTerm;
+  nll += penaltyTerm;
+  REPORT(lambdaPenaltyTerm);
+  REPORT(lambdaGPSPenaltyTerm);
+  REPORT(sdPenaltyTerm);
+  REPORT(sdGPSPenaltyTerm);
+  REPORT(meanPenaltyTerm);
+  REPORT(meanGPSPenaltyTerm);
+  REPORT(penaltyTerm);
   
   vector<Type> lambdaDiffPenalty(nPen);
   vector<Type> meanDiffPenalty(nPen);
@@ -591,11 +634,13 @@ Type objective_function<Type>::operator() ()
     if(doSmoothnessPenalty == Type(1)) {
       nll  +=  -dnorm(betaTaperPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperPenaltyLogLambda;
       nll  +=  -dnorm(betaTaperGPSPenaltyLogLambda, penaltyMean, penaltySD,true) - betaTaperGPSPenaltyLogLambda;
-      nll  +=  -dnorm(betasdPenaltyLogLambda, penaltyMean, penaltySD,true) - betasdPenaltyLogLambda;
-      nll  +=  -dnorm(betaGammaPenaltyLogLambda, penaltyMean, penaltySD,true) - betaGammaPenaltyLogLambda;
+      if(varSmoothnessPenalty == Type(1)) {
+        nll  +=  -dnorm(betasdPenaltyLogLambda, penaltyMean, penaltySD,true) - betasdPenaltyLogLambda;
+      }
+      // nll  +=  -dnorm(betaGammaPenaltyLogLambda, penaltyMean, penaltySD,true) - betaGammaPenaltyLogLambda;
       nll  +=  -dnorm(betaMeanPenaltyLogLambda, penaltyMean, penaltySD,true) - betaMeanPenaltyLogLambda;
       
-      if(diffVar == Type(1))
+      if(diffVar == Type(1) && varSmoothnessPenalty == Type(1))
         nll  +=  -dnorm(betasdGPSPenaltyLogLambda, penaltyMean, penaltySD,true) - betasdGPSPenaltyLogLambda;
       if(diffMean == Type(1))
         nll  +=  -dnorm(betaMeanGPSPenaltyLogLambda, penaltyMean, penaltySD,true) - betaMeanGPSPenaltyLogLambda;

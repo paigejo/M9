@@ -184,7 +184,7 @@ predsGivenSubsidenceTMB = function(modelInfo, fault=csz, subDat=dr1, niter=500, 
   # beta (logZeta areal), zeta (areal), logZetaPoint, seismicMoment, Mw
   # under the normal model, predictions becomes a conditional normal problem
   
-  # get the distribution of Y and its covariance to zeta process
+  # get the distribution of Y and its covariance to zeta process TODO: include omega parameters here and in the conditional normal
   mvnApprox = estSubsidenceMeanCov(meanVecY, lambda, SigmaFault, GT1, subDat=T1Dat, 
                                    tvec=taperVecY, normalModel=TRUE)
   SigmaY = mvnApprox$Sigma

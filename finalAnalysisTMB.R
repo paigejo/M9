@@ -45,35 +45,47 @@ G = okadaAll(csz, lonGrid, latGrid, cbind(dr1$Lon, dr1$Lat), slip=1, poisson=0.2
 ## set up down-dip slip limit and gps dataset: set threshold, match error with 
 ## empirical estimates from Pollitz and Evans (2017)
 depthThresh=21000
+# depthThresh=40000
 nKnots = 5
 nKnotsGPS = 5
 dStar=25000
-dStarGPS=40000
+# dStarGPS=40000 # beginning of Benioff zone
+# dStarGPS = max(slipDat$Depth) # 68540.67
+# dStarGPS = 70000
+dStarGPS = 25000
 set.seed(123)
 threshSlipDat = slipDatCSZ[slipDatCSZ$Depth<depthThresh,]
 threshSlipDat$slipErr = threshSlipDat$slipErr*3
 minLat = min(c(csz$latitude, threshSlipDat$lat)) - .001
 maxLat = max(c(csz$latitude, threshSlipDat$lat)) + .001
 
-# fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = TRUE, 
-#                       G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1), 
-#                       sharedSpatialProcess=TRUE, jointShared = TRUE)
-fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doTaperDiffPenalty = FALSE, 
-                      G=G, debugPlotting=TRUE, logPenaltyPar=log(1), logDiffPenaltyPar=log(1),
-                      sharedSpatialProcess=TRUE, jointShared = TRUE, includeGammaSpline = FALSE, 
-                      doMeanSpline=FALSE, doVarSpline=FALSE, diffGPSTaper=FALSE)
+fullFit = fitModelTMB(fixedPenalty = TRUE, fixedDiffPenalty = TRUE, doDiffPenalty = FALSE,
+                      G=G, debugPlotting=FALSE, logPenaltyPar=log(.1), logDiffPenaltyPar=log(.0001),
+                      sharedSpatialProcess=TRUE, jointShared = TRUE, estimateGpsShared = TRUE, includeGammaSpline = TRUE,
+                      doMeanSpline=FALSE, doVarSpline=TRUE, diffGPSTaper=TRUE, dStar=dStar,
+                      dStarGPS=dStarGPS, diffMean=FALSE, diffVar=TRUE, inflateVarLocking=TRUE, 
+                      nKnotsVarGPS=1, nKnotsGamma=7, doSmoothnessPenalty=TRUE, conditionalGamma=TRUE, 
+                      constrainMean=FALSE, maxCount=1, varSmoothnessPenalty=FALSE, nKnotsVar=5, 
+                      recompile=TRUE, reparameterizeVar=TRUE, varLogLambda=log(.0001))
+
 # load("fullFit.RData")
-out = load(paste0("~/git/M9/fit_n5_dS25000_diffTRUE_nGPS5_GamTRUE_nGam7_dStarGPS40000_sdTRUE_", 
-                  "nVar5_fixInflFALSE_fixedPenTRUE_logPen0_sharePenFALSE_MeanTRUE_nMu5_nMuGPS7_", 
-                  "diffPenTRUE_logDiffPen0_fixDiffTRUE_diff0-4.605_pen0-4.605_diffMuFALSE_constrTRUE_", 
-                  "useHyperFALSE.RData"))
+out = load(paste0("fit_dS25000_dSGPS25000_n5_nGPS5_nGam7_nVar5_nVarGPS1_nMu1_nMuGPS0", 
+                  "_smoothPTRUEvSmoothPFALSE_fixPenTRUE_logPen-2.303_sharePFALSE_diffPFALSE", 
+                  "_logDiffP-9.21_fixDiffTRUE_varPFALSE_reparTRUE_diff0-4.605_pen0-4.605_", 
+                  "hypFALSE_estGpsShared_cnstrFALSE.RData"))
 fullFit = modelInfo
+fullFit = updateSDReport(fullFit)
+# test = updateHessian(fullFit) # out of memory error
+fullFit = updateHessian(fullFit, numerical = TRUE)
 
 # make parameter table
-tab = cbind(fullFit$report$value, fullFit$report$sd)
+tab = fullFit$sdReport
 filterIn = c(1, 3:nrow(tab))
 tab = tab[filterIn,]
 colnames(tab) = c("Estimate", "SE")
+# rownames(tab) = names(fullFit$opt$par)
+names(tab$par.fixed) = names(fullFit$opt$par)
+tab
 
 # all the reported parameters are already exponentiated
 # parNames = rownames(tab)
@@ -129,13 +141,13 @@ slipSims = sweep(zetaSims, 1, tvec, "*")
 slipPreds = list(meanSlip=muAreal, slipSims=slipSims, Sigma=diag(normalPreds$zetaSD * normalPreds$zetaSD), 
                  muc=normalPreds$zetaEsts)
 # list(meanSlip=meanSlip, slipSims=slipSims, Sigma=Sigma, Sigmac=Sigma, muc=muZetaCSZ, 
-     # SigmacGPS = SigmaD, mucGPS=muZetaGPS)
+# SigmacGPS = SigmaD, mucGPS=muZetaGPS)
 # plot results:
 ggplotFixedSlip(muAreal, NULL, l95Areal, u95Areal, sdAreal, event="T1", plotNameRoot="1700 event ", logScale=FALSE, 
                 fileNameRoot=paste0("finalT1TMB"))
 ggComparePredsToSubsTMB(fullFit, slipPreds=slipPreds, G=GT1, plotNameRoot="1700 event ", gpsDat=threshSlipDat, 
-                     subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("finalT1TMB"), 
-                     fault=csz, nsim = 50000, magLimits = c(9.0, 9.2), binwidth=.0025)
+                        subDat=T1Dat, logScale=FALSE, fileNameRoot=paste0("finalT1TMB"), 
+                        fault=csz, nsim = 50000, magLimits = c(9.0, 9.2), binwidth=.0025)
 
 ##### plot marginal predictions
 normalPreds = predsTMB(fullFit, gpsDat = threshSlipDat, nsim = 50000)
@@ -277,8 +289,8 @@ load("finalAnalysis1.RData")
 
 # first genereate slip and subsidence simulations:
 slipPreds = preds(fullFit, nsim=10000, fault=csz, tvec=fitComb$tvec, 
-                      posNormalModel=FALSE, normalModel=TRUE, phiZeta=fitComb$MLEs[length(fitComb$MLEs)-1], 
-                      anisotropic=TRUE, taperedGPSDat=TRUE)
+                  posNormalModel=FALSE, normalModel=TRUE, phiZeta=fitComb$MLEs[length(fitComb$MLEs)-1], 
+                  anisotropic=TRUE, taperedGPSDat=TRUE)
 subPredsComb = predsToSubsidence(fitComb$MLEs, slipPredsComb, G=G, useMVNApprox=FALSE, subDat=inflateDr1, 
                                  posNormalModel=FALSE, normalModel=TRUE, tvec=fitComb$tvec, dStar=dStar)
 
